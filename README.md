@@ -169,3 +169,17 @@ for GitHub organization `casadi`, repository `casadi-viz`, workflow `publish.yml
 with direct publishing allowed and no environment restriction. This registry-side
 configuration has not been performed by the repository setup. See
 [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
+
+## Submatrix operations
+
+Open `examples/indexing.html` to compare submatrix extraction, assignment and
+sparse-entry reordering. Selecting an operation shows row/column mappings;
+hovering or focusing a mapping row highlights the corresponding matrix cells.
+Coordinates are zero-based. The matrix contents toggle also controls these grids.
+Regenerate the bundled examples with `python examples/generate-indexing.py` using
+a CasADi build supporting graph export.
+
+The optional `mapping_kind` field (`extract`, `assign`, `add`) describes the
+existing nonzero `mapping` array. Extraction maps each output entry to an input
+entry; assignment/addition maps each values entry to an output entry. Bundles
+without this field retain the original nonzero-list inspector.

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CasADi · Submatrix operations</title><link rel="stylesheet" href="page.css">
+<style>.example-code{margin:0;padding:12px 24px;background:#f7f7f7;font:13px monospace;white-space:pre-wrap}.gallery-controls p{margin:0;color:#666}#graph{min-height:600px}</style>
+</head><body>
+<header><strong>Cas<span>AD</span>i · Submatrix operations</strong><a href="bundles.html">Graph examples →</a></header>
+<div class="gallery-controls"><select id="case" aria-label="Submatrix example">
+<option value="subref">Extract a submatrix</option>
+<option value="subassign">Assign a submatrix</option>
+<option value="sparse_subref">Reorder sparse entries</option>
+</select><p>Hover or focus an entry-mapping row to highlight its source and destination.</p></div>
+<pre id="code" class="example-code"></pre><div id="graph"></div>
+<script type="module">
+import {createGraphViewer} from '../dist/index.js';
+const host=document.getElementById('graph'),viewer=createGraphViewer(host);
+const snippets={subref:'A = MX.sym("A", 4, 4)\nB = A[[0, 2], [1, 3]]',subassign:'A = MX.sym("A", 4, 4); Y = MX.sym("Y", 2, 2)\nB = MX(A)\nB[[0, 2], [1, 3]] = Y',sparse_subref:'S = MX.sym("S", Sparsity.lower(4))\ny = S.nz[[8, 0, 5]]'};
+async function load(){
+ const name=document.getElementById('case').value;document.getElementById('code').textContent=snippets[name];
+ const graph=await (await fetch('graphs/'+name+'.casadi_viz')).json();
+ await viewer.setGraph(graph);
+ host.shadowRoot.getElementById('instruction-'+graph.nodes.find(n=>n.mapping_kind).id).dispatchEvent(new MouseEvent('click'));
+}
+document.getElementById('case').onchange=()=>load().catch(console.error);
+await load();
+</script></body></html>

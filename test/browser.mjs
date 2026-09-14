@@ -29,6 +29,18 @@ try {
  assert.equal(await page.locator('#second svg').count(),1);assert.equal(await page.locator('#graph svg').count(),1);
  await page.evaluate(()=>window.second.destroy());assert.equal(await page.locator('#second svg').count(),0);
  console.log('Bundle viewer: nested navigation, toggles, isolated instances and lifecycle passed');
+ await page.goto(base+'/examples/indexing.html');
+ await page.locator('.mapping-table').waitFor();
+ for(const name of ['subref','subassign','sparse_subref']) {
+   await page.selectOption('#case',name);
+   await page.waitForFunction(name=>document.querySelector('#graph').shadowRoot.querySelector('#breadcrumbs').textContent.includes(name),name);
+   await page.locator('.mapping-table tr').nth(1).hover();
+   assert.equal(await page.locator('.mapping-grids .mapped').count(),2);
+   await page.locator('#detail-toggle').uncheck();
+   assert.equal(await page.locator('.mapping-grids').count(),0);
+   await page.locator('#detail-toggle').check();
+ }
+ console.log('Submatrix viewer: extraction, assignment, sparse coordinates and cell highlights passed');
  if(process.env.VIZ_TEST_WASM==='1') {
    await page.goto(base+'/examples/index.html');
    await page.waitForFunction(()=>document.querySelector('#result').textContent.startsWith('Evaluation'),{timeout:30000});

@@ -4,7 +4,7 @@ export interface GraphNode {
   id:number;op:number;kind:string;display:string;label:string;expression:string;formula:string;
   binary:boolean;ordered:boolean;inputs:Sparsity[];outputs:Sparsity[];
   input_names:string[];output_names:string[];constants:string[];
-  callee?:number;callee_type?:string;io_index?:number;io_offset?:number;symbol?:string;mapping?:number[];
+  callee?:number;callee_type?:string;io_index?:number;io_offset?:number;symbol?:string;mapping?:number[];mapping_kind?:'extract'|'assign'|'add';
 }
 export interface FunctionGraph {
   version:1;name:string;type:string;direction:'TB'|'BT'|'LR'|'RL';

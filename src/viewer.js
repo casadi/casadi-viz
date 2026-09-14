@@ -2,6 +2,7 @@
 import css from './viewer.css';
 import template from './template.html';
 import {validateBundle} from './validate.js';
+import {entryMapping} from './mapping.js';
 
 /** Mount a viewer. Graphs are plain casadi_viz bundles; no CasADi runtime is required. */
 export function createGraphViewer(host, options={}) {
@@ -88,12 +89,54 @@ function mount(container, root, runtime) {
         const cell=row.insertCell(), k=lookup.get(r+','+c);cell.className=k===undefined?'zero':'nz';
         if(!constant)cell.classList.add('spy');
         cell.textContent=constant?(k===undefined?'.':String(values[k])):'';
+        if(k!==undefined)cell.dataset.nonzero=k;
         cell.title=k===undefined?'Structural zero':`Row ${r}, column ${c}, nonzero ${k}`;
       }
     }
     wrap.append(table);
     if(sp.shape.some(n=>n>8)) {const note=document.createElement('div');note.className='hint';note.textContent='Showing the first 8 rows / columns. Full sparsity below.';wrap.append(note);}
     return wrap;
+  }
+  function mappingView(mapping,node) {
+    const section=document.createElement('section');section.className='entry-mapping';
+    const heading=document.createElement('h3');heading.textContent='Entry mapping';
+    const note=document.createElement('p');note.className='hint';
+    note.textContent=(mapping.kind==='extract'?'Selected source entries become the output.':
+      mapping.kind==='assign'?'Values replace the highlighted entries; other base entries are retained.':
+      'Values are added to the highlighted base entries; other entries are retained.')+' Coordinates are zero-based.';
+    section.append(heading,note);
+    const grids=document.createElement('div');grids.className='mapping-grids';
+    const edge=model.edges.find(e=>e.to===node.id && e.input===mapping.input);
+    const producer=edge && model.nodes[edge.from];
+    const source=matrix(mapping.source,producer?.constants,producer?.kind==='constant');
+    const target=matrix(mapping.target,undefined,false);
+    for(const [name,grid] of [[node.input_names[mapping.input],source],['output',target]]) {
+      const group=document.createElement('div'),label=document.createElement('div');
+      label.className='port-title';label.textContent=name;group.append(label,grid);grids.append(group);
+    }
+    if(showContents)section.append(grids);
+    const table=document.createElement('table');table.className='mapping-table';
+    const header=table.createTHead().insertRow();
+    for(const label of [node.input_names[mapping.input],mapping.kind==='add'?'+= output':'→ output']) {
+      const cell=document.createElement('th');cell.textContent=label;header.append(cell);
+    }
+    const coordinate=p=>p?'['+p.join(', ')+']':'—';
+    const highlight=rows=>{
+      grids.querySelectorAll('.mapped').forEach(cell=>cell.classList.remove('mapped'));
+      for(const row of rows)for(const [grid,index] of [[source,row.from],[target,row.to]]) {
+        grid.querySelector(`[data-nonzero="${index}"]`)?.classList.add('mapped');
+      }
+    };
+    for(const entry of mapping.rows.slice(0,128)) {
+      const row=table.insertRow();row.tabIndex=0;
+      row.insertCell().textContent=entry.source?coordinate(entry.source):'0 (structural zero)';
+      row.insertCell().textContent=entry.target?coordinate(entry.target):'ignored';
+      row.onmouseenter=row.onfocus=()=>highlight([entry]);
+      row.onmouseleave=row.onblur=()=>highlight(mapping.rows);
+    }
+    highlight(mapping.rows);section.append(table);
+    if(mapping.rows.length>128){const more=document.createElement('p');more.className='hint';more.textContent='Showing the first 128 mappings.';section.append(more);}
+    return section;
   }
   function inspect() {
     if (selected===null) return;
@@ -111,10 +154,12 @@ function mount(container, root, runtime) {
       const note=document.createElement('p');note.className='hint';note.textContent='No internal graph was included for this '+node.callee_type+'.';panel.append(note);
     }
     panel.append(expression,portList('Inputs',node.inputs,shown?trace.before[selected]:undefined,node.input_names),portList('Outputs',node.outputs,shown?trace.after[selected]:node.kind==='constant'?[node.constants]:undefined,node.output_names,node.kind==='constant'));
-    if(node.mapping){
-      const heading=document.createElement('h3'),mapping=document.createElement('pre');heading.textContent='Nonzero mapping';
-      mapping.textContent=node.mapping.map((v,i)=>`${i}: ${v}`).join(', ');
-      panel.append(heading,mapping);
+    const mapping=entryMapping(node);
+    if(mapping)panel.prepend(mappingView(mapping,node));
+    else if(node.mapping){
+      const heading=document.createElement('h3'),detail=document.createElement('pre');
+      heading.textContent='Nonzero mapping';detail.textContent=node.mapping.map((v,i)=>`${i}: ${v}`).join(', ');
+      panel.append(heading,detail);
     }
     const detail=document.createElement('details'),summary=document.createElement('summary'),instruction=document.createElement('pre');
     summary.textContent='Evaluator expression';instruction.textContent=node.expression;detail.append(summary,instruction);panel.append(detail);
