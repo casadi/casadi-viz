@@ -163,7 +163,7 @@ fail before packaging.
 
 The release job uses npm trusted publishing (OIDC), with provenance. Before the
 first npm release, arrange package access and configure npm's trusted publisher
-for GitHub organization `casadi`, repository `casadi-viz`, workflow `test.yml`,
+for GitHub organization `casadi`, repository `casadi-viz`, workflow `publish.yml`,
 with direct publishing allowed and no environment restriction. This registry-side
 configuration has not been performed by the repository setup. See
 [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).
