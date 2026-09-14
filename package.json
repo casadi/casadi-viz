@@ -1,6 +1,6 @@
 {
   "name": "@casadi/casadi-viz",
-  "version": "0.1.0-dev.0",
+  "version": "3.8.0",
   "description": "Interactive CasADi expression and Function graphs, with optional evaluation trace replay",
   "type": "module",
   "license": "LGPL-3.0-or-later",

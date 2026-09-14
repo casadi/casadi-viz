@@ -100,12 +100,22 @@ repository. See `toolchain/README.md` for the tested source-build recipe.
 
 ## Native HTML export uses this same viewer
 
-CasADi's `misc/graph_viewer.html` is a small HTML shell that loads a pinned
-version of this package from unpkg. Graph data stays embedded in the exported
+CasADi's `misc/casadi_viz.html` is a small HTML shell that loads this package
+from unpkg using the producing CasADi major/minor version. Graph data stays embedded in the exported
 HTML; opening it requires internet access to load the viewer and renderer.
 The `viz_js` option can embed a local renderer, but the viewer still loads from
 unpkg. No JavaScript toolchain or vendored viewer bundle is needed to build CasADi.
-Update the pinned package URLs in CasADi when adopting a new viewer release.
+CasADi `3.8.x` selects `@casadi/casadi-viz@3.8`, resolving to the latest stable
+`3.8.y` viewer. The two patch numbers are independent. Every viewer patch in
+that line must support graphs and traces from all CasADi `3.8.x` releases.
+Breaking format changes belong to a new compatibility line (for example `3.11`).
+Keep old lines published and backport compatible viewer fixes as needed.
+
+The `viewer_url` string option overrides the default module URL, for example
+for a locally served development build. The HTML imports the ESM viewer. Its renderer URL is relative to the resolved
+module URL, so both assets come from the same exact package release even if a
+new patch is published between requests. Explicit graph and trace schema
+versions remain independent of this package compatibility convention.
 
 C++ remains responsible for graph extraction, JSON serialization and standalone
 DOT generation. Interactive DOT assembly and rendering live in this repository.
