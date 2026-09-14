@@ -150,6 +150,20 @@ The optional WASM tests cover real C++ graph export, optimization, trace replay,
 expression edits and recovery from an editor error. Native CasADi's Python tests
 check JSON/file equivalence and overload dispatch.
 
-The GitHub workflow builds, tests and produces an npm tarball. It does not
-publish automatically. Publishing a release requires selecting a version,
-reviewing the tarball and npm access for the `@casadi` scope.
+The GitHub workflow builds and tests from source, then packs exactly those built
+files into the downloadable `casadi-viz-package` artifact. Published npm packages
+come from this CI artifact; the publish job does not rebuild or run lifecycle
+scripts. Pushes and pull requests build artifacts without publishing to npm.
+
+To release, update the version in `package.json` and `package-lock.json`, commit,
+and publish a GitHub release with the matching `v<version>` tag. That release
+runs the build and tests before publishing its artifact to npm. Prereleases use
+npm's `next` tag; stable versions use `latest`. Version and prerelease mismatches
+fail before packaging.
+
+The release job uses npm trusted publishing (OIDC), with provenance. Before the
+first npm release, arrange package access and configure npm's trusted publisher
+for GitHub organization `casadi`, repository `casadi-viz`, workflow `test.yml`,
+with direct publishing allowed and no environment restriction. This registry-side
+configuration has not been performed by the repository setup. See
+[npm trusted publishing](https://docs.npmjs.com/trusted-publishers/).

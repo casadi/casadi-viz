@@ -1,5 +1,10 @@
-name: Package and browser tests
-on: [push, pull_request, workflow_dispatch]
+name: Build, test and package
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  release:
+    types: [published]
 permissions:
   contents: read
 jobs:
@@ -11,6 +16,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Check release version
+        if: github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: node scripts/check-release.mjs
       - run: npm ci
       - run: npm run build && npm test
       - run: npx playwright install --with-deps chromium
@@ -24,8 +35,30 @@ jobs:
             sleep 1
           done
           npm run test:browser
-      - run: npm pack
+      - run: npm pack --ignore-scripts
       - uses: actions/upload-artifact@v4
         with:
           name: casadi-viz-package
           path: '*.tgz'
+  publish:
+    if: github.event_name == 'release'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: casadi-viz-package
+          path: package
+      - name: Publish the tested CI artifact
+        env:
+          PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          npm_tag=latest
+          if [ "$PRERELEASE" = true ]; then npm_tag=next; fi
+          npm publish package/*.tgz --access public --provenance --ignore-scripts --tag "$npm_tag"
