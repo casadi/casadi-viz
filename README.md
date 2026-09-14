@@ -183,3 +183,31 @@ The optional `mapping_kind` field (`extract`, `assign`, `add`) describes the
 existing nonzero `mapping` array. Extraction maps each output entry to an input
 entry; assignment/addition maps each values entry to an output entry. Bundles
 without this field retain the original nonzero-list inspector.
+
+## Direct `.casadi` import prototype
+
+Branch `poc/casadi-file-reader` uses the adjacent `casadi2json` repository as a
+local dependency. Clone/place that repository at `../casadi2json`, then run:
+
+```sh
+npm install
+npm run build
+PORT=8774 npm run dev
+# Open http://127.0.0.1:8774/examples/casadi-files.html
+```
+
+The decoder emits viewer-independent JSON with shared-object references. The
+adapter in `src/casadi-adapter.js` reconstructs instruction edges and supplies
+labels and entry mappings to the existing viewer. `dist/casadi-import.js` is an
+experimental separate entry point; the normal viewer API is unchanged.
+
+The demo accepts supported native `Function.save()` files, displays their decoded
+index/slice metadata, and downloads the intermediate JSON. CasADi WASM is not
+loaded; Graphviz's renderer still uses its own WASM payload as usual.
+
+`npm test` compares the resulting graphs with native CasADi exports. With the
+server running, `node test/casadi-files-browser.mjs` checks file upload, rendering,
+JSON download and invalid-file recovery. Run `python scripts/generate-casadi-fixtures.py`
+after regenerating fixtures in the decoder repository to update the local copies.
+This remains a limited MX prototype; consult the decoder README for supported
+serialization versions and constructs.

@@ -18,3 +18,5 @@ await writeFile('dist/standalone.html',`<!doctype html>
 <script>const viewer=CasadiViz.createGraphViewer(document.getElementById('graph'),{runtime:JSON.parse(document.getElementById('viz-config').textContent)});viewer.setGraph(JSON.parse(document.getElementById('graph-data').textContent)).catch(console.error);</script>
 </body></html>\n`);
 console.log('Built ESM, browser script, renderer and standalone export template');
+// Proof-of-concept file import; isolated from the normal viewer entry point.
+await build({entryPoints:['src/casadi-import.js'],bundle:true,format:'esm',outfile:'dist/casadi-import.js'});
