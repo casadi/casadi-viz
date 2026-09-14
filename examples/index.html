@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>CasADi · Expression playground</title>
+<link rel="stylesheet" href="page.css"></head><body>
+<header><strong>Cas<span>AD</span>i · Expression playground</strong><a href="bundles.html">Browse exported graphs →</a></header>
+<main><section class="editor"><h1>Build, view, optimize</h1><p>Edit the expression, then evaluate it or find its minimum. Computation runs in your browser.</p>
+<label for="code">CasADi JavaScript</label><textarea id="code" spellcheck="false">const x = ca.SX.sym('x', 2);
+const [a, b] = ca.vertsplit(x);
+const u = ca.SX.sym('u');
+const square = ca.Function('square', [u],
+  [ca.times(u, u)], ['u'], ['squared'],
+  {never_inline: true});
+const f = ca.plus(
+  square(ca.minus(a, ca.SX(2))),
+  square(ca.plus(b, ca.SX(1)))
+);
+return {x, f};</textarea>
+<label for="point">Starting point</label><input id="point" value="[0, 0]" aria-label="Starting point">
+<div class="actions"><button id="evaluate">Evaluate &amp; view</button><button id="solve">Optimize &amp; view</button><button id="cancel" disabled>Cancel</button></div>
+<label class="check"><input id="capture" type="checkbox">Capture evaluation trace</label>
+<p class="hint">Optional <code>g</code> in <code>return {x, f, g}</code> defines equality constraints, g = 0. Double-click a function in the graph to step inside.</p>
+<pre id="result" role="status">Ready.</pre><button id="download" disabled>Download .casadi_viz</button>
+</section><div id="graph" aria-label="Expression graph"></div></main>
+<script type="module" src="playground.js"></script></body></html>

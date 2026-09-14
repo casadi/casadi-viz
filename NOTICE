@@ -1,0 +1,3 @@
+Viewer source derived from CasADi, copyright 2010-2026 the CasADi authors.
+Distributed under LGPL-3.0-or-later.
+The renderer is @viz-js/viz, including Graphviz. See dist/licenses.

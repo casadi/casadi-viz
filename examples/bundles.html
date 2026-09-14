@@ -1,0 +1,13 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CasADi · Graph bundles</title><link rel="stylesheet" href="page.css"></head><body>
+<header><strong>Cas<span>AD</span>i · Graph bundles</strong><a href="index.html">Expression playground →</a></header>
+<div class="gallery-controls"><select id="case" aria-label="Graph example"><option value="3">Sparse matrix expression</option><option value="13">SX matrix inputs and outputs</option><option value="16">Named multi-output call</option><option value="17" selected>Nested functions</option></select><label>Open .casadi_viz <input id="file" type="file" accept=".casadi_viz,application/json"></label><span id="message" role="status"></span></div><div id="graph"></div>
+<script type="module">
+import {createGraphViewer} from '../dist/index.js';
+const viewer=createGraphViewer(document.getElementById('graph')),message=document.getElementById('message');
+let generation=0;
+async function open(source){const request=++generation;try{const text=await source;if(request!==generation)return;await viewer.setGraph(text);message.textContent='';}catch(e){if(request===generation)message.textContent=e.message;}}
+function example(){open(fetch('graphs/example_'+document.getElementById('case').value+'.casadi_viz').then(r=>r.text()));}
+document.getElementById('case').onchange=example;
+document.getElementById('file').onchange=e=>{if(e.target.files[0])open(e.target.files[0].text());};
+example();
+</script></body></html>

@@ -1,0 +1,24 @@
+diff --git a/Source/Modules/wasm_js.cxx b/Source/Modules/wasm_js.cxx
+index 2ee49f134..20d8c2466 100644
+--- a/Source/Modules/wasm_js.cxx
++++ b/Source/Modules/wasm_js.cxx
+@@ -4048,7 +4048,8 @@ int WASM_JS::constructorHandler(Node *n) {
+         SwigType *t = Getattr(q, "type");
+         if (String *vec_cls = vector_class_name(t)) {
+           Printf(call_args_js, "__unwrap(__arr_to_vec(args[%d], %s))", pi, Char(vec_cls));
+-        } else if (is_registered_class_type(t)) {
++        } else if (is_registered_class_type(t)
++            || Equal(Getattr(q, "tmap:ctype"), "EM_VAL")) {
+           Printf(call_args_js, "__unwrap(args[%d])", pi);
+         } else {
+           /* Detect string-typed parm via the ctype typemap, which is
+@@ -4156,7 +4157,8 @@ int WASM_JS::constructorHandler(Node *n) {
+             SwigType *t2 = Getattr(q2, "type");
+             if (String *vec_cls = vector_class_name(t2)) {
+               Printf(t_call_args, "__unwrap(__arr_to_vec(args[%d], %s))", pi, Char(vec_cls));
+-            } else if (is_registered_class_type(t2)) {
++            } else if (is_registered_class_type(t2)
++                || Equal(Getattr(q2, "tmap:ctype"), "EM_VAL")) {
+               Printf(t_call_args, "__unwrap(args[%d])", pi);
+             } else {
+               /* Primitive / string present arg: emit the call value, a
