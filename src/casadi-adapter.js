@@ -1,4 +1,4 @@
-import {OP} from '@casadi/casadi2json/operations';
+import {OP} from '@casadi/casadi-reader/operations';
 import {validateBundle} from './validate.js';
 const names=new Map(Object.entries(OP).map(([name,id])=>[id,name]));
 const unary=new Set(['neg','exp','log','sqrt','sq','twice','sin','cos','tan','asin','acos','atan',

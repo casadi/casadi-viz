@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {decodeCasadi} from '@casadi/casadi2json';
+import {decodeCasadi} from '@casadi/casadi-reader';
 import {toGraphBundle} from '../src/casadi-adapter.js';
 const sp=s=>s&&({shape:s.shape,colind:s.colind,row:s.row});
 const semantic=g=>({inputs:g.inputs.map(p=>({...p,sparsity:sp(p.sparsity)})),outputs:g.outputs.map(p=>({...p,sparsity:sp(p.sparsity)})),

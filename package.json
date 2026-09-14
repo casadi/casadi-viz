@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@viz-js/viz": "3.30.0",
-    "@casadi/casadi2json": "file:../casadi2json"
+    "@casadi/casadi-reader": "file:../casadi-reader"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

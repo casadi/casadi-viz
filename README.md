@@ -186,8 +186,8 @@ without this field retain the original nonzero-list inspector.
 
 ## Direct `.casadi` import prototype
 
-Branch `poc/casadi-file-reader` uses the adjacent `casadi2json` repository as a
-local dependency. Clone/place that repository at `../casadi2json`, then run:
+Branch `poc/casadi-file-reader` uses the adjacent `casadi-reader` repository as a
+local dependency. Clone/place that repository at `../casadi-reader`, then run:
 
 ```sh
 npm install
