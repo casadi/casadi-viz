@@ -100,22 +100,12 @@ repository. See `toolchain/README.md` for the tested source-build recipe.
 
 ## Native HTML export uses this same viewer
 
-```sh
-npm run build
-node scripts/vendor-casadi.mjs /path/to/casadi-worktree
-```
-
-This copies `dist/standalone.html` into CasADi's embedded resource and records its
-package version and SHA-256. Rebuild CasADi afterwards. The template has exactly
-two placeholders: `@@GRAPH_DATA@@` and `@@VIZ_CONFIG@@`; C++ fills these without
-executing JavaScript or contacting npm.
-
-The template is generated from the same component used by the npm entry point.
-It contains the viewer code and CSS. CasADi's `viz_js` option additionally embeds
-the Viz.js runtime; otherwise the existing pinned CDN configuration applies.
-No JavaScript toolchain is required for ordinary CasADi builds using the vendored
-asset. Maintain viewer source here, regenerate the artifact, and vendor an
-explicit version when updating CasADi.
+CasADi's `misc/graph_viewer.html` is a small HTML shell that loads a pinned
+version of this package from unpkg. Graph data stays embedded in the exported
+HTML; opening it requires internet access to load the viewer and renderer.
+The `viz_js` option can embed a local renderer, but the viewer still loads from
+unpkg. No JavaScript toolchain or vendored viewer bundle is needed to build CasADi.
+Update the pinned package URLs in CasADi when adopting a new viewer release.
 
 C++ remains responsible for graph extraction, JSON serialization and standalone
 DOT generation. Interactive DOT assembly and rendering live in this repository.
@@ -125,6 +115,8 @@ DOT generation. Interactive DOT assembly and rendering live in this repository.
 The package accepts `format: "casadi_viz", version: 1`. The root Function is
 index 0; `functions[i]` is index `i+1`. Call nodes' `callee` fields index that
 registry. `include_functions: false` exports keep calls but omit their internals.
+`casadi_version` records the producing CasADi version (for example `"3.8.1"`),
+independently of the bundle schema version. Older exports may omit it.
 Sparsities are compressed-column arrays; constants are strings in nonzero order.
 Instruction IDs match CasADi `dump_trace` records. TypeScript declarations describe
 the fields. Full mathematical metadata remains available independently of the

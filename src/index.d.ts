@@ -12,6 +12,7 @@ export interface FunctionGraph {
   edges:{from:number;output:number;to:number;input:number}[];
 }
 export interface GraphBundle extends FunctionGraph {
+  casadi_version?:string;
   format:'casadi_viz';view:'function'|'expression';functions:FunctionGraph[];
 }
 export interface Viewer {
