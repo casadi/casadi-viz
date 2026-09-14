@@ -31,8 +31,8 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@viz-js/viz": "3.30.0",
-    "@casadi/casadi-reader": "file:../casadi-reader"
+    "@casadi/casadi-reader": "^0.1.0",
+    "@viz-js/viz": "3.30.0"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

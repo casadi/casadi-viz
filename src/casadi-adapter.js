@@ -1,4 +1,5 @@
-import {OP} from '@casadi/casadi-reader/operations';
+import {OP} from './casadi-ops.js';
+import {toMXDocument} from './casadi-structure.js';
 import {validateBundle} from './validate.js';
 const names=new Map(Object.entries(OP).map(([name,id])=>[id,name]));
 const unary=new Set(['neg','exp','log','sqrt','sq','twice','sin','cos','tan','asin','acos','atan',
@@ -8,6 +9,7 @@ const binary=new Set(['add','sub','mul','div','pow','constpow','lt','le','eq','n
 const mappingOps=new Set([OP.getnonzeros,OP.setnonzeros,OP.addnonzeros]);
 const symbols={add:'+',sub:'-',mul:'*',div:'/',neg:'-',sq:'(.)^2',twice:'2*(.)',inv:'1/(.)'};
 export function toGraphBundle(document){
+  if(document.format==='casadi_serialization')document=toMXDocument(document);
   if(document.format!=='casadi_json'||document.version!==1)throw Error('Expected casadi_json version 1');
   const objects=document.objects.map(o=>({...o}));
   const get=id=>id===null?null:objects[id];

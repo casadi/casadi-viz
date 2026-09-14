@@ -17,7 +17,7 @@ async function open(source){const request=++generation;status.textContent='Readi
  try {const text=await source;if(request!==generation)return;
   const decoded=decodeCasadi(text),bundle=toGraphBundle(decoded);await viewer.setGraph(bundle);if(request!==generation)return;
   documentJSON=decoded;download.disabled=false;
-  document.getElementById('metadata').textContent=JSON.stringify(decoded.objects.filter(o=>o.kind==='mx'&&Object.keys(o.info).length),null,2);
+  document.getElementById('metadata').textContent=JSON.stringify(bundle.nodes.filter(n=>n.info&&Object.keys(n.info).length).map(n=>({operation:n.label,info:n.info})),null,2);
   status.textContent=`${bundle.nodes.length} instructions · decoded without CasADi`;
  }catch(error){if(request===generation)status.textContent=error.message;}
 }

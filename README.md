@@ -186,8 +186,8 @@ without this field retain the original nonzero-list inspector.
 
 ## Direct `.casadi` import prototype
 
-Branch `poc/casadi-file-reader` uses the adjacent `casadi-reader` repository as a
-local dependency. Clone/place that repository at `../casadi-reader`, then run:
+Branch `poc/casadi-file-reader` uses the published `@casadi/casadi-reader`
+package. To run the prototype:
 
 ```sh
 npm install
@@ -196,9 +196,11 @@ PORT=8774 npm run dev
 # Open http://127.0.0.1:8774/examples/casadi-files.html
 ```
 
-The decoder emits viewer-independent JSON with shared-object references. The
-adapter in `src/casadi-adapter.js` reconstructs instruction edges and supplies
-labels and entry mappings to the existing viewer. `dist/casadi-import.js` is an
+The reader emits typed fields and shared-object references without interpreting
+SX or MX operations. `src/casadi-structure.js` interprets the MX records, and
+`src/casadi-adapter.js` reconstructs instruction edges and supplies labels and
+entry mappings to the existing viewer. All mathematical interpretation lives
+in casadi-viz. `dist/casadi-import.js` is an
 experimental separate entry point; the normal viewer API is unchanged.
 
 The demo accepts supported native `Function.save()` files, displays their decoded
