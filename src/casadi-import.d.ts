@@ -2,8 +2,8 @@ import type {GraphBundle} from './index.js';
 export interface StructuralDocument {
   format:'casadi_serialization';version:1;serializationProtocol:number;
   root:number|null;roots:unknown[];objects:Array<{
-    type:string;fields:Array<{name:string;type:string;value:unknown;offset:number;byteLength:number}>;
-    layouts:string[];offset:number;byteLength:number;
+    type:string;fields:Array<{name:string;type:string;value:unknown}>;
+    layouts:string[];
   }>;
 }
 export interface ReaderOptions {lazy?:boolean;type?:string;maxItems?:number;lazyThreshold?:number;}
