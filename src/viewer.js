@@ -2,7 +2,10 @@
 import css from './viewer.css';
 import template from './template.html';
 import {validateBundle} from './validate.js';
-import {entryMapping} from './mapping.js';
+import {readCasadi,toGraphBundle} from './casadi-import.js';
+import {formatNumber as formatNumeric} from './number-format.js';
+import {serializationInspector} from './serialization-inspector.js';
+import {entryMapping,indexingLabel} from './mapping.js';
 
 /** Mount a viewer. Graphs are plain casadi_viz bundles; no CasADi runtime is required. */
 export function createGraphViewer(host, options={}) {
@@ -13,7 +16,18 @@ export function createGraphViewer(host, options={}) {
   return {
     async setGraph(bundle) {
       if(destroyed)throw Error('Viewer has been destroyed');
-      const root=validateBundle(typeof bundle==='string'?JSON.parse(bundle):bundle);
+      if(typeof bundle==='string')bundle=JSON.parse(bundle);
+      if(bundle?.format==='casadi_viz' && bundle.version===1 && typeof bundle.source==='string'){
+        const decoded=toGraphBundle(await readCasadi(bundle.source));
+        const {source,...preferences}=bundle;
+        bundle={...decoded,...preferences};
+        if(bundle.direction)for(const graph of [bundle,...bundle.functions])graph.direction=bundle.direction;
+        if(bundle.include_functions===false){
+          bundle.functions=[];
+          for(const node of bundle.nodes)delete node.callee;
+        }
+      }
+      const root=validateBundle(bundle);
       session?.destroy();
       container.innerHTML='<style>'+css+'</style>'+template;
       session=mount(container,root,runtime);
@@ -23,10 +37,6 @@ export function createGraphViewer(host, options={}) {
       if(!session || destroyed)throw Error('Load a graph before loading a trace');
       return session.loadTrace(trace);
     },
-    setView(view) {
-      if(!session || destroyed)throw Error('Load a graph before selecting a view');
-      session.setView(view);
-    },
     destroy() {session?.destroy();session=null;destroyed=true;container.replaceChildren();}
   };
 }
@@ -34,16 +44,19 @@ export function createGraphViewer(host, options={}) {
 function mount(container, root, runtime) {
   let resolveReady,rejectReady;
   const ready=new Promise((resolve,reject)=>{resolveReady=resolve;rejectReady=reject;});
-  const models=[root,...(root.functions||[])];
-  let model=root;
+  const models=[root,...(root.functions||[])].map(graph=>({...graph,nodes:graph.nodes.map(node=>{
+    const label=indexingLabel(node);return label?{...node,display:label,formula:label}:node;
+  })}));
+  let model=models[0], functionDetails=false;
   const $ = id => container.querySelector('#'+id);
   const setStatus = (text, kind='') => { $('status').textContent=text; $('status').className=kind; };
-  let svg=null, initialView=null, trace=null, cursor=0, selected=null, timer=null, traceEnabled=false, showContents=true, showSizes=true;
-  let viewMode=root.view||'function';
-  let trail=[{model,viewMode,trace:null,cursor:0,selected:null,traceName:''}];
+  let svg=null, initialView=null, trace=null, cursor=0, selected=null, timer=null, traceEnabled=false, showContents=root.show_matrix_contents??true, showSizes=root.show_matrix_sizes??true;
+  const viewMode=()=>['MX','SX'].includes(model.type)?'expression':'function';
+  let trail=[{model,trace:null,cursor:0,selected:null,traceName:''}];
   const elements=new Map(), valueElements=new Map();
   let selectionTimer=null;
-  const formatNumber = n => typeof n==='number' ? (Object.is(n,-0) ? '-0' : Number(n.toPrecision(7)).toString()) : n;
+  let numberFormat='g',digits=6;
+  const formatNumber=n=>formatNumeric(n,numberFormat,digits);
   const shortValues = values => values.map(v => v===null ? 'unused' : '['+v.slice(0,3).map(formatNumber).join(', ')+(v.length>3 ? ', \u2026' : '')+']').join(' ; ');
   function stop() { clearInterval(timer); timer=null; $('play').textContent='Play'; }
   function controls() {
@@ -64,7 +77,7 @@ function mount(container, root, runtime) {
       const label=document.createElement('div'); label.className='port-title';
       label.textContent=`${names[i]}${showSizes?' \u00b7 '+sp.shape.join('-by-'):''} \u00b7 ${sp.row.length} nonzeros`;
       const value=document.createElement('div'); value.className='port-value';
-      value.textContent=values===undefined ? (traceEnabled ? 'Not evaluated' : '') : values[i]===null ? 'Unused / absent buffer' : '['+values[i].map(n=>Object.is(n,-0)?'-0':String(n)).join(', ')+']';
+      value.textContent=values===undefined ? (traceEnabled ? 'Not evaluated' : '') : values[i]===null ? 'Unused / absent buffer' : '['+values[i].map(formatNumber).join(', ')+']';
       port.append(label,value);
       if (showContents && sp.shape[0]*sp.shape[1]!==1) port.append(matrix(sp,values?.[i],constant));
       if (sp.row.length!==sp.shape[0]*sp.shape[1]) {
@@ -88,7 +101,7 @@ function mount(container, root, runtime) {
       for(let c=0;c<Math.min(8,sp.shape[1]);c++){
         const cell=row.insertCell(), k=lookup.get(r+','+c);cell.className=k===undefined?'zero':'nz';
         if(!constant)cell.classList.add('spy');
-        cell.textContent=constant?(k===undefined?'.':String(values[k])):'';
+        cell.textContent=constant?(k===undefined?'.':formatNumber(values[k])):'';
         if(k!==undefined)cell.dataset.nonzero=k;
         cell.title=k===undefined?'Structural zero':`Row ${r}, column ${c}, nonzero ${k}`;
       }
@@ -138,16 +151,38 @@ function mount(container, root, runtime) {
     if(mapping.rows.length>128){const more=document.createElement('p');more.className='hint';more.textContent='Showing the first 128 mappings.';section.append(more);}
     return section;
   }
+  function detailsTarget() {
+    const node=selected===null?null:model.nodes[selected];
+    if(node?.kind==='call')return {name:node.display,
+      ref:node.callee_serialized_ref??models[node.callee]?.serialized_ref};
+    return {name:model.name,ref:model.serialized_ref};
+  }
+  function detailsButton() {
+    const button=$('function-details'),target=detailsTarget();
+    button.hidden=!root.serialization;
+    button.disabled=!Number.isInteger(target.ref);
+    button.title=button.disabled?'No serialized properties available for '+target.name:'Inspect '+target.name;
+  }
   function inspect() {
+    if(functionDetails){
+      const target=detailsTarget();
+      $('selection-title').textContent=target.name;
+      const panel=$('inspector');
+      if(panel.dataset.settingsRef!==String(target.ref)){
+        panel.dataset.settingsRef=String(target.ref);
+        panel.replaceChildren(serializationInspector(root.serialization,target.ref,formatNumber));
+      }
+      return;
+    }
     if (selected===null) return;
     const node=model.nodes[selected], shown=traceEnabled && trace && selected<cursor;
-    $('selection-title').textContent=viewMode==='expression' && node.kind==='input' ? node.symbol : viewMode==='function' && ['input','output'].includes(node.kind) ? model[node.kind+'s'][node.io_index].name : node.display;
-    const panel=$('inspector'); panel.replaceChildren();
+    $('selection-title').textContent=viewMode()==='expression' && node.kind==='input' ? node.symbol : viewMode()==='function' && ['input','output'].includes(node.kind) ? model[node.kind+'s'][node.io_index].name : node.display;
+    const panel=$('inspector'); delete panel.dataset.settingsRef;panel.replaceChildren();
     if(traceEnabled){
       const state=document.createElement('div');state.className='state';
       state.textContent=shown ? trace.after[selected]===undefined ? 'Interrupted' : 'Evaluated' : 'Not evaluated';panel.append(state);
     }
-    const expression=document.createElement('pre'); expression.textContent=node.formula;
+    const expression=document.createElement('pre'); expression.textContent=node.kind==='constant'?node.constants.map(formatNumber).join(', '):node.formula;
     if(node.callee!==undefined){
       const enter=document.createElement('button');enter.id='enter-function';enter.textContent='Step into '+node.display;enter.onclick=()=>enterFunction(node.id);panel.append(enter);
     } else if(node.kind==='call'){
@@ -162,21 +197,30 @@ function mount(container, root, runtime) {
       panel.append(heading,detail);
     }
     const detail=document.createElement('details'),summary=document.createElement('summary'),instruction=document.createElement('pre');
+    const operation=document.createElement('p');operation.className='hint';operation.textContent='Operation: '+node.label;panel.append(operation);
     summary.textContent='Evaluator expression';instruction.textContent=node.expression;detail.append(summary,instruction);panel.append(detail);
   }
   function select(id) {
+    functionDetails=false;$('function-details').setAttribute('aria-pressed','false');
     if (selected!==null) {
       elements.get(selected)?.classList.remove('active');
       for(const v of valueElements.get(selected)||[])v.element.classList.remove('active');
     }
     selected=id; elements.get(id)?.classList.add('active');
     for(const v of valueElements.get(id)||[])v.element.classList.add('active');
-    $('details').hidden=false;inspect();
+    $('details').hidden=false;detailsButton();inspect();
   }
+  $('function-details').onclick=()=>{
+    if($('function-details').disabled)return;
+    functionDetails=!functionDetails;
+    $('function-details').setAttribute('aria-pressed',String(functionDetails));
+    $('details').hidden=!functionDetails&&selected===null;inspect();
+  };
   $('close-inspector').onclick=()=>{
+    functionDetails=false;$('function-details').setAttribute('aria-pressed','false');
     elements.get(selected)?.classList.remove('active');
     for(const v of valueElements.get(selected)||[])v.element.classList.remove('active');
-    selected=null;$('details').hidden=true;
+    selected=null;$('details').hidden=true;detailsButton();
   };
   function paint(id) {
     const element=elements.get(id);
@@ -219,7 +263,7 @@ function mount(container, root, runtime) {
     for (let k=Math.min(old,cursor); k<Math.max(old,cursor); k++) paint(k);
     if (follow && cursor>0) {
       let id=cursor-1;
-      if(viewMode==='expression' && model.nodes[id].kind==='output')id=model.edges.find(e=>e.to===id)?.from??id;
+      if(viewMode()==='expression' && model.nodes[id].kind==='output')id=model.edges.find(e=>e.to===id)?.from??id;
       select(id);
     } else inspect();
     controls();
@@ -312,7 +356,7 @@ function mount(container, root, runtime) {
   $('trace-file').onchange=()=>loadTrace($('trace-file').files[0]).catch(()=>{});
 
   function header() {
-    $('view-mode').value=viewMode;
+    detailsButton();
     const nav=$('breadcrumbs');nav.replaceChildren();
     trail.forEach((frame,i)=>{
       if(i){const separator=document.createElement('span');separator.textContent='/';nav.append(separator);}
@@ -321,21 +365,21 @@ function mount(container, root, runtime) {
       button.onclick=()=>navigate(i);nav.append(button);
     });
 
-    $('meta').textContent=`${model.type} \u00b7 ${model.nodes.length.toLocaleString()} instructions \u00b7 ${model.edges.length.toLocaleString()} connections`;
+    $('meta').textContent=`${model.type} \u00b7 ${model.nodes.length.toLocaleString()} ${['MX','SX'].includes(model.type)?'nodes':'instructions'} \u00b7 ${model.edges.length.toLocaleString()} connections`;
   }
   function saveFrame() {
-    Object.assign(trail[trail.length-1],{viewMode,trace,cursor,selected,traceName:$('trace-name').textContent});
+    Object.assign(trail[trail.length-1],{trace,cursor,selected,traceName:$('trace-name').textContent});
   }
   function activateFrame() {
     stop();++loadNumber;
-    ({model,viewMode,trace,cursor,selected}=trail[trail.length-1]);
+    ({model,trace,cursor,selected}=trail[trail.length-1]);
     $('trace-name').textContent=trail[trail.length-1].traceName;
-    $('details').hidden=selected===null;header();controls();inspect();layout();
+    $('details').hidden=!functionDetails&&selected===null;header();controls();inspect();layout();
     setStatus(trace?'Trace restored. Step through the evaluation.':'Select a node to inspect it. Double-click a function to step inside.');
   }
   function enterFunction(id) {
     const callee=model.nodes[id].callee;if(callee===undefined)return;
-    saveFrame();trail.push({model:models[callee],viewMode:'function',trace:null,cursor:0,selected:null,traceName:''});activateFrame();
+    saveFrame();trail.push({model:models[callee],trace:null,cursor:0,selected:null,traceName:''});activateFrame();
   }
   function navigate(index) {
     saveFrame();trail=trail.slice(0,index+1);activateFrame();
@@ -348,26 +392,27 @@ function mount(container, root, runtime) {
         const m=data.model, details=[], sources=new Map(), targets=new Map(), hidden=new Set();
         const isMatrix=sp=>sp.shape[0]*sp.shape[1]!==1;
         const hasTable=(n,sp)=>isMatrix(sp) && (n.kind==='call' || n.mapping || !n.inputs.length || !n.inputs.every(p=>JSON.stringify(p)===JSON.stringify(sp)));
-        const record=n=>(n.ordered && !n.binary) || n.kind==='call';
-        const functionView=data.viewMode==='function', direction=functionView?'TB':m.direction;
+        const record=n=>(n.kind==='operation' && n.inputs.length>1 && !n.binary) || n.kind==='call';
+        const functionView=data.viewMode==='function', direction=data.direction;
+        const horizontal=direction==='LR'||direction==='RL', reverse=direction==='RL'||direction==='BT';
+        const inputSide={TB:'n',BT:'s',LR:'w',RL:'e'}[direction];
+        const outputSide={TB:'s',BT:'n',LR:'e',RL:'w'}[direction];
+        const binarySides={TB:['nw','ne'],BT:['se','sw'],LR:['nw','sw'],RL:['se','ne']}[direction];
         for(const n of m.nodes)if(n.kind==='output' || (functionView && n.kind==='input'))hidden.add(n.id);
-        const dot=['digraph G {','graph [rankdir='+direction+', bgcolor="white", pad="0.4", nodesep="0.55", ranksep="0.65"];','node [shape=ellipse, style=filled, color="#b00000", fillcolor="#b00000", fontcolor="white", fontname="Helvetica", fontsize=14, margin="0.15,0.08", width=0.5, height=0.5];','edge [color="#34658b", penwidth=1.5, arrowsize=0.65];'];
-        function table(n,sp,port) {
-          const id='value-'+n.id+'-'+port, cells=[], lookup=new Map();
+        const dot=['digraph G {','graph [rankdir='+direction+', bgcolor="white", newrank=true, pad="0.4", nodesep="'+data.nodeSpacing+'", ranksep="'+data.levelSpacing+'"];','node [shape=ellipse, style=filled, color="#b00000", fillcolor="#b00000", fontcolor="white", fontname="Times-Roman", fontsize=14, margin="0.15,0.08", width=0.5, height=0.5];','edge [color="#000000", penwidth=1.5, arrowsize=0.65];'];
+        function matrixRows(n,sp,cells,prefix='nz') {
+          const lookup=new Map(),columns=Math.max(1,Math.min(8,sp.shape[1]));
           for(let c=0;c<Math.min(8,sp.shape[1]);c++)for(let k=sp.colind[c];k<sp.colind[c+1];k++){
             if(sp.row[k]<8)lookup.set(sp.row[k]+','+c,k);
           }
-          const columns=Math.max(1,Math.min(8,sp.shape[1]));
-          let label='<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#cccccc">';
-          const title=[n.boundary?n.display:n.kind==='call'?n.output_names[port]:'',data.showSizes?sp.shape.join('-by-'):''].filter(Boolean).join(' : ');
-          if(title)label+='<TR><TD COLSPAN="'+columns+'" BGCOLOR="white"><FONT COLOR="'+(n.role==='input'?'#34658b':n.role==='output'?'#b00000':'#666666')+'">'+h(title)+'</FONT></TD></TR>';
+          let label='';
           for(let r=0;r<Math.min(8,sp.shape[0]);r++){
             label+='<TR>';
             for(let c=0;c<Math.min(8,sp.shape[1]);c++){
               const k=lookup.get(r+','+c);
               const text=n.kind==='constant'?(k===undefined?'.':n.constants[k]):'';
               if(k!==undefined)cells.push({label:text,index:k});
-              label+='<TD'+(k===undefined?'':' PORT="nz'+k+'"')+' BGCOLOR="white">';
+              label+='<TD'+(k===undefined?'':' PORT="'+prefix+k+'"')+' BGCOLOR="white">';
               if(n.kind==='constant')label+=h(text);
               else label+='<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0"><TR><TD FIXEDSIZE="TRUE" WIDTH="9" HEIGHT="9" BGCOLOR="'+(k===undefined?'white':'#111111')+'"></TD></TR></TABLE>';
               label+='</TD>';
@@ -376,40 +421,93 @@ function mount(container, root, runtime) {
             label+='</TR>';
           }
           if(sp.shape.some(n=>n>8))label+='<TR><TD COLSPAN="'+columns+'">...</TD></TR>';
-          if(!title && !sp.shape[0])label+='<TR><TD>empty</TD></TR>';
+          if(!sp.shape[0])label+='<TR><TD>empty</TD></TR>';
+          return label;
+        }
+        function table(n,sp,port) {
+          const id='value-'+n.id+'-'+port, cells=[];
+          const columns=Math.max(1,Math.min(8,sp.shape[1]));
+          let label='<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#cccccc">';
+          const title=[n.boundary?n.display:n.kind==='call'?n.output_names[port]:'',data.showSizes?sp.shape.join('-by-'):''].filter(Boolean).join(' : ');
+          if(title)label+='<TR><TD COLSPAN="'+columns+'" BGCOLOR="white"><FONT COLOR="'+(n.role==='input'?'#34658b':n.role==='output'?'#b00000':'#666666')+'">'+h(title)+'</FONT></TD></TR>';
+          label+=matrixRows(n,sp,cells);
           label+='</TABLE>';
           dot.push('v'+n.id+'_'+port+' [id="'+id+'", shape=plain, fontcolor="#666666", fontsize=10, label=<'+label+'>];');
-          if(!n.boundary)dot.push('n'+n.id+(n.kind==='call'?':out'+port:'')+' -> v'+n.id+'_'+port+' [arrowsize=0.5];');
+          if(!n.boundary)dot.push('n'+n.id+(n.kind==='call'?':out'+port+':'+outputSide:':'+outputSide)+' -> v'+n.id+'_'+port+' [arrowsize=0.5];');
           sources.set(n.id+':'+port,'v'+n.id+'_'+port);details.push({id,node:n.id,port,cells});
           return details[details.length-1];
+        }
+        function outputAssembly(n,sp,owners) {
+          const id='value-'+n.id+'-0',graphId='v'+n.id+'_0',cells=[],regions=[];
+          const vector=sp.shape.includes(1)&&sp.row.length===sp.shape[0]*sp.shape[1];
+          const columns=data.showContents?2:1;
+          let label='<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" COLOR="#dddddd" BGCOLOR="white">';
+          const title=[n.display,data.showSizes?sp.shape.join('-by-'):''].filter(Boolean).join(' : ');
+          label+='<TR><TD COLSPAN="'+columns+'"><FONT COLOR="#b00000">'+h(title)+'</FONT></TD></TR>';
+          for(const owner of [...owners].sort((a,b)=>a.offset-b.offset)){
+            const range=(vector?'':'nz')+'['+owner.offset+(owner.count===1?'':':'+(owner.offset+owner.count))+']';
+            const port='write'+owner.node;
+            const rangeCell='<TD PORT="'+port+'"><FONT COLOR="#666666">'+h(range)+'</FONT></TD>';
+            let contents='';
+            if(data.showContents){
+              const piece=[];
+              contents='<TD><TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3">'+
+                matrixRows(n,m.nodes[owner.node].inputs[0],piece,port+'_nz')+'</TABLE></TD>';
+              cells.push(...piece.map(cell=>({...cell,node:owner.node})));
+            }
+            label+='<TR>'+(direction==='RL'?contents+rangeCell:rangeCell+contents)+'</TR>';
+            targets.set(owner.node,graphId+':'+port+(direction==='RL'?':e':':w'));
+            regions.push({node:owner.node,label:range});
+          }
+          label+='</TABLE>';
+          dot.push(graphId+' [id="'+id+'", shape=plain, fontsize=10, label=<'+label+'>];');
+          const detail={id,node:null,port:0,cells,regions,render:data.showContents?'value':'io'};
+          details.push(detail);return {detail,graphId};
         }
         for(const original of m.nodes){
           const n=!functionView && original.kind==='input'?{...original,display:original.symbol}:original;
           if(hidden.has(n.id))continue;
           const sp=n.outputs[0]||n.inputs[0];
           const dimension=data.showSizes && sp && isMatrix(sp) && !(data.showContents && n.outputs.some(p=>hasTable(n,p)))?'\n'+sp.shape.join('-by-'):'';
+          const color=n.kind==='input'||n.kind==='symbol'?'#34658b':n.kind==='constant'?'#38754d':n.kind==='call'?'#b56324':'#b00000';
+          const portColor=n.kind==='call'?'#d79b69':'#d26666';
           let label=q(n.display+dimension), shape='ellipse';
           if(record(n)){
             shape='plain';
-            const ports=(names,prefix)=>'<TR>'+names.map((name,i)=>'<TD PORT="'+prefix+i+'"><FONT POINT-SIZE="10">'+h(name+(data.showSizes && (prefix==='in'?n.inputs:n.outputs)[i] && isMatrix((prefix==='in'?n.inputs:n.outputs)[i])?' '+(prefix==='in'?n.inputs:n.outputs)[i].shape.join('-by-'):''))+'</FONT></TD>').join('')+'</TR>';
-            let html='<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="#b00000">';
-            if(n.input_names.length)html+='<TR><TD><TABLE BORDER="0" CELLBORDER="1" COLOR="#d26666" CELLSPACING="0">'+ports(n.input_names,'in')+'</TABLE></TD></TR>';
-            html+='<TR><TD>'+h(n.display)+'</TD></TR>';
-            if(n.kind==='call' && n.output_names.length)html+='<TR><TD><TABLE BORDER="0" CELLBORDER="1" COLOR="#d26666" CELLSPACING="0">'+ports(n.output_names,'out')+'</TABLE></TD></TR>';
+            const ports=(names,prefix)=>{
+              const cells=names.map((name,i)=>{
+                const sp=(prefix==='in'?n.inputs:n.outputs)[i];
+                const label=name+(name && data.showSizes && sp && isMatrix(sp)?' '+sp.shape.join('-by-'):'');
+                return '<TD PORT="'+prefix+i+'" WIDTH="16" HEIGHT="16"><FONT POINT-SIZE="10">'+(h(label)||'&#160;')+'</FONT></TD>';
+              });
+              return '<TD><TABLE BORDER="0" CELLBORDER="1" COLOR="'+portColor+'" CELLSPACING="0">'+
+                (horizontal?cells.map(cell=>'<TR>'+cell+'</TR>').join(''):'<TR>'+cells.join('')+'</TR>')+'</TABLE></TD>';
+            };
+            const inputs=n.input_names.length?ports(n.input_names.map(name=>n.kind==='call'||n.label==='mtimes'?name:''),'in'):'';
+            const outputs=n.kind==='call' && n.output_names.length?ports(n.output_names,'out'):'';
+            const title=n.kind==='call' && n.callee_type?
+              '<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0"><TR><TD>'+h(n.display)+
+              '</TD></TR><TR><TD><FONT POINT-SIZE="10" COLOR="#f6dcc6">'+h(n.callee_type)+'</FONT></TD></TR></TABLE>':h(n.display);
+            const sections=[inputs,'<TD>'+title+'</TD>',outputs].filter(Boolean);
+            if(reverse)sections.reverse();
+            let html='<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="'+color+'">'+
+              (horizontal?'<TR>'+sections.join('')+'</TR>':sections.map(section=>'<TR>'+section+'</TR>').join(''));
             label='<'+html+'</TABLE>>';
           }
-          const color=n.kind==='input'||n.kind==='symbol'?'#34658b':n.kind==='constant'?'#38754d':'#b00000';
           dot.push('n'+n.id+' [id="instruction-'+n.id+'", shape='+shape+', color='+q(color)+', fillcolor='+q(color)+', label='+label+'];');
           n.outputs.forEach((sp,port)=>{if(data.showContents && hasTable(n,sp))table(n,sp,port);});
         }
         const rows={input:[],output:[]};
         for(const kind of ['input','output'])m[kind+'s'].forEach((io,index)=>{
-          const assembly=!functionView && kind==='output' && m.type==='SXFunction' && data.showContents && isMatrix(io.sparsity);
+          const assembly=!functionView && kind==='output' && (m.type==='SXFunction'||m.type==='SX') && data.showContents && isMatrix(io.sparsity);
           if(!functionView && !assembly)return;
           const n={id:'boundary_'+kind+'_'+index,kind:'boundary',boundary:true,role:functionView?kind:'',display:functionView?io.name:''};
           const owners=m.nodes.filter(node=>node.kind===kind && node.io_index===index).map(node=>({node:node.id,offset:node.io_offset,count:(kind==='input'?node.outputs:node.inputs)[0].row.length}));
           let detail, graphId;
-          if(data.showContents && isMatrix(io.sparsity)){
+          const splitOutput=functionView && kind==='output' && owners.length>1;
+          if(splitOutput){
+            ({detail,graphId}=outputAssembly(n,io.sparsity,owners));
+          } else if(data.showContents && isMatrix(io.sparsity)){
             detail=table(n,io.sparsity,0);graphId='v'+n.id+'_0';
             detail.cells=detail.cells.flatMap(cell=>{
               const owner=owners.find(o=>cell.index>=o.offset && cell.index<o.offset+o.count);
@@ -425,31 +523,33 @@ function mount(container, root, runtime) {
           Object.assign(detail,{node:null,boundary:true,boundaryKind:kind,sp:io.sparsity,owners});
           for(const owner of owners){
             const cell=detail.cells.some(c=>c.node===owner.node);
-            const endpoint=graphId+(m.type==='SXFunction' && cell?':nz'+owner.offset:'');
+            const endpoint=graphId+((m.type==='SXFunction'||m.type==='SX') && cell?':nz'+owner.offset:'');
             if(kind==='input')sources.set(owner.node+':0',endpoint);
-            else targets.set(owner.node,endpoint);
+            else if(!splitOutput)targets.set(owner.node,endpoint);
           }
           if(functionView)rows[kind].push(graphId);
         });
         if(functionView){
           for(const kind of ['input','output']){
             const ids=rows[kind];if(!ids.length)continue;
+            dot.push('subgraph cluster_'+kind+' { id="boundary-group-'+kind+'"; label="'+(kind==='input'?'Inputs':'Outputs')+'"; fontname="Helvetica"; fontsize=12; fontcolor="#666666"; color="#cccccc"; style="rounded"; margin=16; '+ids.join('; ')+'; }');
+            if(data.engine!=='dot')continue;
             dot.push('{ rank='+(kind==='input'?'source':'sink')+'; '+ids.join('; ')+'; }');
             for(let i=1;i<ids.length;i++)dot.push(ids[i-1]+' -> '+ids[i]+' [style=invis, weight=100];');
           }
         }
         for(const e of m.edges){
           if(hidden.has(e.to) && !targets.has(e.to))continue;
-          const source=sources.get(e.from+':'+e.output)||('n'+e.from+(m.nodes[e.from].kind==='call'?':out'+e.output:''));
+          const source=sources.get(e.from+':'+e.output)||('n'+e.from+(m.nodes[e.from].kind==='call'?':out'+e.output+':'+outputSide:':'+outputSide));
           const n=m.nodes[e.to];
-          let target=targets.get(e.to)||('n'+e.to+(record(n)?':in'+e.input:''));
-          if(n.binary)target+=e.input===0?':w':':e';
+          let target=targets.get(e.to)||('n'+e.to+(record(n)?':in'+e.input+':'+inputSide:n.binary?'':':'+inputSide));
+          if(n.binary)target+=':'+binarySides[e.input];
           dot.push(source+' -> '+target+';');
         }
         dot.push('}');
-        const viz=await Viz.instance(), result=viz.render(dot.join('\n'),{engine:'dot',format:'svg'});
+        const viz=await Viz.instance(), result=viz.render(dot.join('\n'),{engine:data.engine,format:'svg'});
         if(result.status!=='success')throw Error(result.errors.map(e=>e.message).join('; '));
-        self.postMessage({svg:result.output,details,hidden:Array.from(hidden)});
+        self.postMessage({svg:result.output,details,hidden:Array.from(hidden),engines:viz.engines});
       }catch(error){self.postMessage({error:error.message||String(error)});}
     };
   }
@@ -472,6 +572,12 @@ function mount(container, root, runtime) {
       const element=svg.getElementById(value.id);element.classList.remove('node');element.classList.add(value.render==='io'?'io-node':'value-node');
       element.onclick=()=>{const id=value.node ?? value.cells[0]?.node ?? value.owners?.[0]?.node;if(id!==undefined)select(id);};
       const texts=Array.from(element.querySelectorAll('text')), groups=new Map();
+      for(const region of value.regions||[]){
+        const label=texts.find(t=>t.textContent===region.label);
+        if(label){label.style.pointerEvents='auto';label.style.cursor='pointer';
+          label.onclick=event=>{event.stopPropagation();select(region.node);};}
+      }
+
       if(value.boundary){
         for(const owner of value.owners)groups.set(owner.node,[]);
         const label=document.createElementNS('http://www.w3.org/2000/svg','text'),box=element.getBBox();
@@ -514,6 +620,23 @@ function mount(container, root, runtime) {
     svg.onpointerup=svg.onpointercancel=()=>{drag=null;};
     resolveReady();$('loading').hidden=true;if(!trace)setStatus('Select a node to inspect it. Scroll to zoom; drag to pan.');
   }
+  $('layout-direction').value=root.direction||'TB';
+  $('layout-engine').onchange=()=>{
+    $('hierarchical-controls').disabled=$('layout-engine').value!=='dot';layout();
+  };
+  $('layout-direction').onchange=()=>layout();
+  const spacingFactor=id=>10**(Number($(id).value)/100);
+  for(const id of ['node-spacing','level-spacing'])$(id).oninput=()=>{
+    const label=Number(spacingFactor(id).toPrecision(3))+'×';
+    $(id+'-value').textContent=label;$(id).setAttribute('aria-valuetext',label+' default spacing');layout();
+  };
+  $('reset-spacing').onclick=()=>{
+    for(const id of ['node-spacing','level-spacing']){
+      $(id).value='0';$(id+'-value').textContent='1×';
+      $(id).setAttribute('aria-valuetext','1× default spacing');
+    }
+    layout();
+  };
   $('fit').onclick=()=>{if(svg)svg.setAttribute('viewBox',initialView);};
   $('cancel-layout').onclick=()=>layoutError('Layout cancelled. Reopen the file to try again.');
   function layout() {
@@ -522,12 +645,40 @@ function mount(container, root, runtime) {
     $('loading').hidden=false;$('loading-text').textContent='Laying out the graph\u2026';$('cancel-layout').hidden=false;
     try {
     workerURL=URL.createObjectURL(new Blob([runtime.source||'', '\n', workerSource],{type:'text/javascript'}));worker=new Worker(workerURL);
-    worker.onmessage=({data})=>{if(data.error){layoutError('Layout failed: '+data.error);return;}releaseWorker();try{installSVG(data.svg,data.details,data.hidden);}catch(error){layoutError(error.message);}};
+    worker.onmessage=({data})=>{if(data.error){layoutError('Layout failed: '+data.error);return;}releaseWorker();try{
+      const labels={dot:'Hierarchical',neato:'Spring',fdp:'Force-directed',sfdp:'Multiscale',circo:'Circular',twopi:'Radial'};
+      const select=$('layout-engine'),selected=select.value;
+      select.replaceChildren(...Object.entries(labels).filter(([engine])=>data.engines.includes(engine)).map(([engine,label])=>{
+        const option=document.createElement('option');option.value=engine;option.textContent=label+' ('+engine+')';return option;
+      }));
+      select.value=selected;
+      installSVG(data.svg,data.details,data.hidden);
+    }catch(error){layoutError(error.message);}};
     worker.onerror=e=>layoutError('Could not load Viz.js. Check connectivity, or export with the viz_js option for offline use.');
-    worker.postMessage({url:runtime.url,model,viewMode,showContents,showSizes});
+    const {serialization,functions,...graph}=model;
+    const layoutModel={...graph,nodes:graph.nodes.map(node=>node.kind==='constant'?{...node,
+      constants:node.constants.map(formatNumber),
+      display:node.constants.length===1?formatNumber(node.constants[0]):node.display}:node)};
+    worker.postMessage({url:runtime.url,model:layoutModel,viewMode:viewMode(),showContents,showSizes,engine:$('layout-engine').value,direction:$('layout-direction').value,nodeSpacing:0.65*spacingFactor('node-spacing'),levelSpacing:0.9*spacingFactor('level-spacing')});
     }catch(error){layoutError(error.message);}
   }
-  $('view-mode').onchange=()=>{viewMode=$('view-mode').value;inspect();layout();};
+  function numberControls(){
+    numberFormat=$('number-format').value;digits=Number($('number-digits').value);
+    $('number-digits').min=numberFormat==='g'?'1':'0';
+    if(numberFormat==='g'&&digits===0){digits=1;$('number-digits').value='1';}
+    $('digits-label').textContent=numberFormat==='g'?'Significant digits':'Decimal places';
+    $('digits-value').textContent=String(digits);
+    for(const option of $('number-format').options){
+      const name={g:'General',f:'Fixed',e:'Scientific'}[option.value];
+      option.textContent=name+' · '+formatNumeric(0.040000000000000001,option.value,digits);
+    }
+    $('inspector').querySelector('.serialization-inspector')?.updateNumbers();
+    inspect();layout();
+  }
+  $('number-format').onchange=numberControls;
+  $('number-digits').oninput=numberControls;
+  $('detail-toggle').checked=showContents;
+  $('size-toggle').checked=showSizes;
   $('detail-toggle').onchange=()=>{showContents=$('detail-toggle').checked;inspect();layout();};
   $('size-toggle').onchange=()=>{showSizes=$('size-toggle').checked;inspect();layout();};
   header();layout();
@@ -535,10 +686,6 @@ function mount(container, root, runtime) {
     ready,
     loadTrace,
     destroy() {stop();clearTimeout(selectionTimer);++loadNumber;releaseWorker();
-      rejectReady(new DOMException('Viewer replaced or destroyed', 'AbortError'));},
-    setView(view) {
-      if(!['function','expression'].includes(view))throw Error('Unknown graph view: '+view);
-      viewMode=view;header();inspect();layout();
-    }
+      rejectReady(new DOMException('Viewer replaced or destroyed', 'AbortError'));}
   };
 }

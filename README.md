@@ -32,7 +32,6 @@ graph data occurs inside the viewer.
 ```js
 await viewer.setGraph(await file.text());
 await viewer.loadTrace(traceFile);          // Blob/File or JSONL string
-viewer.setView('expression');               // or 'function'
 viewer.destroy();                          // release timers, workers and DOM
 ```
 
@@ -184,24 +183,23 @@ existing nonzero `mapping` array. Extraction maps each output entry to an input
 entry; assignment/addition maps each values entry to an output entry. Bundles
 without this field retain the original nonzero-list inspector.
 
-## Direct `.casadi` import prototype
+## Direct `.casadi` import
 
-Branch `poc/casadi-file-reader` uses the published `@casadi/casadi-reader`
-package. To run the prototype:
+Native import uses `@casadi/casadi-reader` 0.2. To run the demo:
 
 ```sh
 npm install
 npm run build
-PORT=8774 npm run dev
-# Open http://127.0.0.1:8774/examples/casadi-files.html
+npm run dev
+# Open http://127.0.0.1:8766/examples/casadi-files.html
 ```
 
 The reader emits typed fields and shared-object references without interpreting
-SX or MX operations. `src/casadi-structure.js` interprets the MX records, and
+SX or MX operations. `src/casadi-structure.js` interprets the MX/SX records, and
 `src/casadi-adapter.js` reconstructs instruction edges and supplies labels and
 entry mappings to the existing viewer. All mathematical interpretation lives
 in casadi-viz. `dist/casadi-import.js` is an
-experimental separate entry point; the normal viewer API is unchanged.
+separate entry point for structural imports.
 
 The public `@casadi/casadi-viz/casadi-import` entry point accepts native files
 and the same `casadi_serialization` JSON produced by JavaScript, Python, C, C++,
@@ -213,10 +211,9 @@ const records = await readCasadi(fileOrJsonString);
 await viewer.setGraph(toGraphBundle(records));
 ```
 
-The adapter validates the structural document version and requires one Function
-root. Mathematical interpretation remains in this package; the reader stays
-independent of visualization. Current visualization coverage is the supported
-MX subset, even though the reader can decode SX and other serialized classes.
+The adapter validates the structural document version and accepts Function roots or MX/SX expression vectors. Mathematical interpretation remains in this package; the reader stays
+independent of visualization. The adapter supports the existing MX subset, scalar SX instruction graphs and
+MX/SX function calls; unsupported instructions fail explicitly.
 
 The demo accepts native `Function.save()` files and structural `.json` files, displays their decoded
 index/slice metadata, and downloads the intermediate JSON. CasADi WASM is not
@@ -226,8 +223,51 @@ loaded; Graphviz's renderer still uses its own WASM payload as usual.
 server running, `node test/casadi-files-browser.mjs` checks file upload, rendering,
 JSON download and invalid-file recovery. Run `python scripts/generate-casadi-fixtures.py`
 after regenerating fixtures in the decoder repository to update the local copies.
-This remains a limited MX prototype; consult the decoder README for supported
-serialization versions and constructs.
+Consult the reader README for supported serialization versions and constructs.
 
 Browser integration tests can also upload other readers’ output with
 `VIZ_PYTHON_JSON=/path/python.json VIZ_NATIVE_JSON=/path/native.json node test/casadi-files-browser.mjs`.
+
+## Serialized Function details
+
+Graphs imported through `casadi-import` expose **Function details** in the side
+pane. Search by field name, type or scalar value; expand dictionaries, arrays and
+shared references. Fields are grouped by their serialized owner. The view uses
+the reader's typed records directly, with no list of known option names. It shows
+serialized state, including settings, rather than claiming every field is a
+public option or inferring which settings differ from defaults.
+
+The pane follows the current Function when navigating the breadcrumb trail.
+Graph bundles without serialized data retain the existing node inspector. The
+optional bundle `serialization` document is shared by all graphs; each graph's
+`serialized_ref` identifies its Function record. Large collections are expanded
+in pages, and shared-reference cycles stop instead of expanding forever.
+
+Try `settings_mx` or `settings_sx` in `examples/casadi-files.html`. Regenerate these
+examples with `python scripts/generate-settings-fixtures.py` using a CasADi build
+with graph export.
+
+The **Numbers** menu controls display precision and general, fixed or scientific
+notation, with live examples. These controls affect graph constants, inspected
+values and traces without changing the underlying data. Matrix indexing nodes
+use slice notation when their mapping proves an equivalent matrix slice.
+Function calls are orange; arrows are black, with serif graph labels for Greek
+symbols.
+
+Expression exports may carry a `source` string containing native CasADi
+serialization instead of precomputed nodes. `setGraph` decodes it through
+casadi-reader and traverses the expression DAG directly: output concatenations
+remain visible, shared nodes are retained, and nested Function calls remain
+navigable. `readCasadi` / `toGraphBundle` also accept ordinary serialized MX/SX
+expressions and expression vectors. Existing Function bundles remain supported.
+
+The **Layout** panel offers the available hierarchical, spring, force-directed,
+multiscale, circular and radial engines. Hierarchical layout additionally has
+flow direction, node spacing and level spacing controls. Other engines choose
+their own placement, including Function boundaries. Anonymous argument ports
+are empty boxes; actual Function port names remain visible.
+
+Presentation follows the imported object: MX/SX expressions use expression
+layout, while Functions show labeled Inputs and Outputs boundaries. Entering
+a Function and navigating back switches presentation automatically. There is
+no view selector or `setView` override; legacy bundle `view` fields are ignored.

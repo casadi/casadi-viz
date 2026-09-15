@@ -1,6 +1,6 @@
 {
   "name": "@casadi/casadi-viz",
-  "version": "3.8.1",
+  "version": "3.8.2",
   "description": "Interactive CasADi expression and Function graphs, with optional evaluation trace replay",
   "type": "module",
   "license": "LGPL-3.0-or-later",
@@ -25,17 +25,18 @@
     "dist",
     "README.md",
     "LICENSE",
-    "NOTICE"
+    "NOTICE",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.mjs",
-    "test:browser": "node test/browser.mjs",
+    "test:browser": "node test/browser.mjs && node test/expressions-browser.mjs && node test/settings-browser.mjs && node test/simple-ports-browser.mjs && node test/focused-details-browser.mjs && node test/output-ranges-browser.mjs && node test/casadi-files-browser.mjs",
     "dev": "node scripts/serve.mjs",
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@casadi/casadi-reader": "^0.1.0",
+    "@casadi/casadi-reader": "^0.2.0",
     "@viz-js/viz": "3.30.0"
   },
   "devDependencies": {
@@ -46,6 +47,6 @@
     "access": "public"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

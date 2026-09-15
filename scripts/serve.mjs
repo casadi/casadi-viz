@@ -4,6 +4,7 @@ import path from 'node:path';
 const root=process.cwd();
 const mime={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.casadi_viz':'application/json','.wasm':'application/wasm','.so':'application/wasm'};
 const server=http.createServer(async(req,res)=>{
+  res.setHeader('Access-Control-Allow-Origin','*');
   try {
     const url=new URL(req.url,'http://localhost');
     let name=decodeURIComponent(url.pathname);

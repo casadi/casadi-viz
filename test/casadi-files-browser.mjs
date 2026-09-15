@@ -5,7 +5,7 @@ const browser=await chromium.launch();
 try {
  const page=await browser.newPage({viewport:{width:1500,height:1000}}),requests=[],errors=[];
  page.on('request',r=>requests.push(r.url()));page.on('pageerror',e=>errors.push(e.message));
- await page.goto((process.env.VIZ_TEST_URL||'http://127.0.0.1:8774')+'/examples/casadi-files.html');
+ await page.goto((process.env.VIZ_TEST_URL||'http://127.0.0.1:8766')+'/examples/casadi-files.html');
  await page.locator('#message').filter({hasText:'decoded without CasADi'}).waitFor();
  await page.locator('#graph svg').waitFor();
  assert.match(await page.locator('#metadata').innerText(),/getnonzeros/);

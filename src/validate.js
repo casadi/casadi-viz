@@ -4,13 +4,22 @@ export function validateBundle(bundle) {
     throw new Error('Expected a casadi_viz bundle (version 1)');
   }
   if(!Array.isArray(bundle.functions))throw Error('Expected a functions array');
+  if(bundle.serialization && (bundle.serialization.format!=='casadi_serialization'||
+     bundle.serialization.version!==1||!Array.isArray(bundle.serialization.objects)))
+    throw Error('Invalid serialized Function data');
   const graphs=[bundle,...bundle.functions];
   for(const graph of graphs) {
+    if(graph.serialized_ref!==undefined && (!Number.isInteger(graph.serialized_ref)||
+       !Array.isArray(bundle.serialization?.objects[graph.serialized_ref]?.fields)))
+      throw Error('Invalid serialized Function reference');
     for(const key of ['nodes','edges','inputs','outputs']) {
       if(!Array.isArray(graph[key]))throw Error('Missing graph array: '+key);
     }
     graph.nodes.forEach((node,id)=>{
       if(node.id!==id)throw Error('Instruction IDs must be consecutive');
+      if(node.callee_serialized_ref!==undefined && (!Number.isInteger(node.callee_serialized_ref)||
+         !Array.isArray(bundle.serialization?.objects[node.callee_serialized_ref]?.fields)))
+        throw Error('Invalid serialized callee reference');
       if(node.callee!==undefined && (!Number.isInteger(node.callee) || !graphs[node.callee])) {
         throw Error('Invalid callee reference');
       }

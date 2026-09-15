@@ -3,9 +3,9 @@
 <title>CasADi file reader · Proof of concept</title><link rel="stylesheet" href="page.css">
 <style>main{display:grid;grid-template-columns:minmax(0,1fr) 320px;height:calc(100vh - 160px)}#graph{height:100%}aside{padding:16px;overflow:auto;border-left:1px solid #ddd}pre{white-space:pre-wrap;overflow-wrap:anywhere}button{cursor:pointer}</style></head>
 <body><header><strong>Cas<span>AD</span>i · Open a .casadi file</strong><a href="bundles.html">Graph bundles →</a></header>
-<div class="gallery-controls"><label>Example <select id="case"><option>mapping</option><option>slice</option><option>assignment</option><option>arithmetic</option><option>sparse</option></select></label>
+<div class="gallery-controls"><label>Example <select id="case"><option>mapping</option><option value="settings_mx">MX calling SX · settings</option><option value="settings_sx">SX · settings</option><option>slice</option><option>assignment</option><option>arithmetic</option><option>sparse</option></select></label>
 <label>Open .casadi or reader JSON <input id="file" type="file" accept=".casadi,.json"></label><button id="download" disabled>Download decoded JSON</button><span id="message" role="status"></span></div>
-<p style="margin:12px 20px">Open native MX files or structural JSON from the C, C++, Python, MATLAB, Julia, or JavaScript reader. No CasADi runtime is loaded.</p>
+<p style="margin:12px 20px">Open native MX/SX files or structural JSON from the C, C++, Python, MATLAB, Julia, or JavaScript reader. No CasADi runtime is loaded.</p>
 <main><div id="graph"></div><aside><h3>Decoded node metadata</h3><p>Slice and index metadata comes from the .casadi file.</p><pre id="metadata"></pre></aside></main>
 <script type="module">
 import {createGraphViewer} from '../dist/index.js';
