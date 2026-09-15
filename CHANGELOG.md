@@ -1,3 +1,8 @@
+# 3.8.3
+
+- Use casadi-reader 0.2.1 with directly generated serialization readers.
+- Retain native Function and expression graph import, including debug serializations.
+
 # 3.8.2
 
 - Read native `.casadi` Functions and MX/SX expressions through casadi-reader 0.2, including structural JSON from its language bindings.
