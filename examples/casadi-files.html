@@ -4,18 +4,18 @@
 <style>main{display:grid;grid-template-columns:minmax(0,1fr) 320px;height:calc(100vh - 160px)}#graph{height:100%}aside{padding:16px;overflow:auto;border-left:1px solid #ddd}pre{white-space:pre-wrap;overflow-wrap:anywhere}button{cursor:pointer}</style></head>
 <body><header><strong>Cas<span>AD</span>i · Open a .casadi file</strong><a href="bundles.html">Graph bundles →</a></header>
 <div class="gallery-controls"><label>Example <select id="case"><option>mapping</option><option>slice</option><option>assignment</option><option>arithmetic</option><option>sparse</option></select></label>
-<label>Open .casadi <input id="file" type="file" accept=".casadi"></label><button id="download" disabled>Download decoded JSON</button><span id="message" role="status"></span></div>
-<p style="margin:12px 20px">Experimental MX reader. Decoding runs locally in JavaScript; no CasADi runtime is loaded.</p>
+<label>Open .casadi or reader JSON <input id="file" type="file" accept=".casadi,.json"></label><button id="download" disabled>Download decoded JSON</button><span id="message" role="status"></span></div>
+<p style="margin:12px 20px">Open native MX files or structural JSON from the C, C++, Python, MATLAB, Julia, or JavaScript reader. No CasADi runtime is loaded.</p>
 <main><div id="graph"></div><aside><h3>Decoded node metadata</h3><p>Slice and index metadata comes from the .casadi file.</p><pre id="metadata"></pre></aside></main>
 <script type="module">
 import {createGraphViewer} from '../dist/index.js';
-import {decodeCasadi,toGraphBundle} from '../dist/casadi-import.js';
+import {readCasadi,toGraphBundle} from '../dist/casadi-import.js';
 const viewer=createGraphViewer(document.getElementById('graph'));
 const status=document.getElementById('message'),download=document.getElementById('download');
 let documentJSON,generation=0;
 async function open(source){const request=++generation;status.textContent='Reading…';
  try {const text=await source;if(request!==generation)return;
-  const decoded=decodeCasadi(text),bundle=toGraphBundle(decoded);await viewer.setGraph(bundle);if(request!==generation)return;
+  const decoded=await readCasadi(text),bundle=toGraphBundle(decoded);await viewer.setGraph(bundle);if(request!==generation)return;
   documentJSON=decoded;download.disabled=false;
   document.getElementById('metadata').textContent=JSON.stringify(bundle.nodes.filter(n=>n.info&&Object.keys(n.info).length).map(n=>({operation:n.label,info:n.info})),null,2);
   status.textContent=`${bundle.nodes.length} instructions · decoded without CasADi`;
@@ -23,7 +23,7 @@ async function open(source){const request=++generation;status.textContent='Readi
 }
 function example(){document.getElementById('file').value='';open(fetch('../test/fixtures/casadi/'+document.getElementById('case').value+'.casadi').then(r=>{if(!r.ok)throw Error('Cannot load example');return r.text();}));}
 document.getElementById('case').onchange=example;
-document.getElementById('file').onchange=e=>{if(e.target.files[0])open(e.target.files[0].text());};
+document.getElementById('file').onchange=e=>{if(e.target.files[0])open(e.target.files[0]);};
 download.onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(documentJSON,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='decoded.casadi.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 example();
 </script></body></html>

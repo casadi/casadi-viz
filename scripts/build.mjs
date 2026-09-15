@@ -20,3 +20,5 @@ await writeFile('dist/standalone.html',`<!doctype html>
 console.log('Built ESM, browser script, renderer and standalone export template');
 // Proof-of-concept file import; isolated from the normal viewer entry point.
 await build({entryPoints:['src/casadi-import.js'],bundle:true,format:'esm',outfile:'dist/casadi-import.js'});
+
+await copyFile('src/casadi-import.d.ts','dist/casadi-import.d.ts');

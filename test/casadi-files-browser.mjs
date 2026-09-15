@@ -16,6 +16,14 @@ try {
  }
  await page.setInputFiles('#file',fileURLToPath(new URL('./fixtures/casadi/assignment.casadi',import.meta.url)));
  await page.waitForFunction(()=>document.querySelector('#metadata').textContent.includes('setnonzeros'));
+ for (const producer of ['python','native']) {
+  const fixture=process.env['VIZ_'+producer.toUpperCase()+'_JSON'];
+  if (!fixture) continue;
+  await page.setInputFiles('#file',fixture);
+  await page.locator('#message').filter({hasText:'decoded without CasADi'}).waitFor();
+  await page.locator('#graph svg').waitFor();
+  assert.match(await page.locator('#metadata').innerText(),/getnonzeros/);
+ }
  await page.setInputFiles('#file',{name:'bad.casadi',mimeType:'text/plain',buffer:Buffer.from('invalid')});
  await page.locator('#message').filter({hasText:'Invalid .casadi encoding'}).waitFor();
  assert.equal(await page.locator('#graph svg').count(),1);

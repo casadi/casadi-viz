@@ -9,10 +9,20 @@ function expand(slice){
   if(n>1000000)throw Error('Mapping too large to visualize');
   return Array.from({length:n},(_,i)=>start+i*step);
 }
+function scalar(value){
+  if(value && typeof value==='object') {
+    if('$integer' in value)return value.$integer;
+    if('$float' in value)return value.$float;
+    throw Error('Expected a scalar constant in serialized graph');
+  }
+  return String(value);
+}
 function slice(value){return Object.fromEntries(value.fields.map(f=>[f.name.split('::').at(-1),f.value]));}
 /** Interpret serialized MX layouts for visualization, independently of the reader. */
 export function toMXDocument(document){
-  if(document.version!==1)throw Error('Unsupported serialization document version');
+  if(document.format!=='casadi_serialization'||document.version!==1)throw Error('Expected casadi_serialization version 1');
+  if(!Array.isArray(document.objects)||!Array.isArray(document.roots)||document.roots.length!==1||!Number.isInteger(document.root))
+    throw Error('Visualization requires one shared Function root; serialized structure remains available');
   const objects=document.objects.map(object=>{
     if(object.type==='Sparsity'){
       const v=field(object,'SparsityInternal::compressed');
@@ -50,11 +60,11 @@ export function toMXDocument(document){
     }
     if(op===OP.const){
       const subtype=field(object,'ConstantMX::type');
-      if(subtype===97)node.constants=field(object,'ConstantMX::nonzeros').map(String);
+      if(subtype===97)node.constants=field(object,'ConstantMX::nonzeros').map(scalar);
       else{
         const constants={48:0,49:1,45:-1};
         const value=Object.hasOwn(constants,subtype)?constants[subtype]:field(object,'Constant::value');
-        node.scalarConstant=String(value);
+        node.scalarConstant=scalar(value);
       }
     }
     return node;

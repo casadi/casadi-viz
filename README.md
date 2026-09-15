@@ -203,7 +203,22 @@ entry mappings to the existing viewer. All mathematical interpretation lives
 in casadi-viz. `dist/casadi-import.js` is an
 experimental separate entry point; the normal viewer API is unchanged.
 
-The demo accepts supported native `Function.save()` files, displays their decoded
+The public `@casadi/casadi-viz/casadi-import` entry point accepts native files
+and the same `casadi_serialization` JSON produced by JavaScript, Python, C, C++,
+MATLAB or Julia:
+
+```js
+import {readCasadi, toGraphBundle} from '@casadi/casadi-viz/casadi-import';
+const records = await readCasadi(fileOrJsonString);
+await viewer.setGraph(toGraphBundle(records));
+```
+
+The adapter validates the structural document version and requires one Function
+root. Mathematical interpretation remains in this package; the reader stays
+independent of visualization. Current visualization coverage is the supported
+MX subset, even though the reader can decode SX and other serialized classes.
+
+The demo accepts native `Function.save()` files and structural `.json` files, displays their decoded
 index/slice metadata, and downloads the intermediate JSON. CasADi WASM is not
 loaded; Graphviz's renderer still uses its own WASM payload as usual.
 
@@ -213,3 +228,6 @@ JSON download and invalid-file recovery. Run `python scripts/generate-casadi-fix
 after regenerating fixtures in the decoder repository to update the local copies.
 This remains a limited MX prototype; consult the decoder README for supported
 serialization versions and constructs.
+
+Browser integration tests can also upload other readers’ output with
+`VIZ_PYTHON_JSON=/path/python.json VIZ_NATIVE_JSON=/path/native.json node test/casadi-files-browser.mjs`.

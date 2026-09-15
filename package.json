@@ -14,7 +14,11 @@
       "import": "./dist/index.js"
     },
     "./standalone.html": "./dist/standalone.html",
-    "./viz-global.js": "./dist/viz-global.js"
+    "./viz-global.js": "./dist/viz-global.js",
+    "./casadi-import": {
+      "types": "./dist/casadi-import.d.ts",
+      "import": "./dist/casadi-import.js"
+    }
   },
   "types": "./dist/index.d.ts",
   "files": [
