@@ -211,6 +211,22 @@ const records = await readCasadi(fileOrJsonString);
 await viewer.setGraph(toGraphBundle(records));
 ```
 
+To export structural JSON from Julia for this input, use `CasADiReader`:
+
+```julia
+using CasADiReader
+document = Document("function.casadi")
+try
+    write("function.json", casadi_json(document))
+finally
+    close(document)
+end
+```
+
+Upload `function.json` in the demo, or pass its contents to `readCasadi`.
+`casadi_data(document)` returns the decoded Julia data, and
+`parse_casadi(text)` decodes serialized `.casadi` text already in memory.
+
 The adapter validates the structural document version and accepts Function roots or MX/SX expression vectors. Mathematical interpretation remains in this package; the reader stays
 independent of visualization. The adapter supports the existing MX subset, scalar SX instruction graphs and
 MX/SX function calls; unsupported instructions fail explicitly.
