@@ -1,3 +1,8 @@
+# 3.8.4
+
+- Use casadi-reader 0.2.2, generated from the CasADi 3.8.1 release serialization scheme.
+- Keep the CasADi 3.8 compatibility pin for browser exports.
+
 # 3.8.3
 
 - Use casadi-reader 0.2.1 with directly generated serialization readers.

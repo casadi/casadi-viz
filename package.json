@@ -1,6 +1,6 @@
 {
   "name": "@casadi/casadi-viz",
-  "version": "3.8.3",
+  "version": "3.8.4",
   "description": "Interactive CasADi expression and Function graphs, with optional evaluation trace replay",
   "type": "module",
   "license": "LGPL-3.0-or-later",
@@ -36,7 +36,7 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@casadi/casadi-reader": "^0.2.1",
+    "@casadi/casadi-reader": "^0.2.2",
     "@viz-js/viz": "3.30.0"
   },
   "devDependencies": {
