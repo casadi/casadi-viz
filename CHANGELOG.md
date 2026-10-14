@@ -1,3 +1,7 @@
+# Unreleased
+
+- Operands of commutative operations (CasADi's CommChecker: `ordered` is false) no longer cross above the node: when dot places them the other way round, the two arrows trade in-ports after layout and are routed again the way dot routes them. No re-layout. Applies to the dot engine. Only pairs whose present route the transcription reproduces within 1 pt are touched; others (edges across several ranks, and in practice every flow but the default top-to-bottom) are left as dot drew them.
+
 # 3.8.4
 
 - Use casadi-reader 0.2.2, generated from the CasADi 3.8.1 release serialization scheme.

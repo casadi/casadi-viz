@@ -6,6 +6,7 @@ import {readCasadi,toGraphBundle} from './casadi-import.js';
 import {formatNumber as formatNumeric} from './number-format.js';
 import {serializationInspector} from './serialization-inspector.js';
 import {entryMapping,indexingLabel} from './mapping.js';
+import {edgeNudge} from './edge-nudge.js';
 
 /** Mount a viewer. Graphs are plain casadi_viz bundles; no CasADi runtime is required. */
 export function createGraphViewer(host, options={}) {
@@ -538,22 +539,28 @@ function mount(container, root, runtime) {
             for(let i=1;i<ids.length;i++)dot.push(ids[i-1]+' -> '+ids[i]+' [style=invis, weight=100];');
           }
         }
+        const operands=[];
         for(const e of m.edges){
           if(hidden.has(e.to) && !targets.has(e.to))continue;
           const source=sources.get(e.from+':'+e.output)||('n'+e.from+(m.nodes[e.from].kind==='call'?':out'+e.output+':'+outputSide:':'+outputSide));
           const n=m.nodes[e.to];
           let target=targets.get(e.to)||('n'+e.to+(record(n)?':in'+e.input+':'+inputSide:n.binary?'':':'+inputSide));
           if(n.binary)target+=':'+binarySides[e.input];
-          dot.push(source+' -> '+target+';');
+          // operands of a commutative operation may trade in-ports after layout (edge-nudge.js)
+          if(n.binary && n.ordered===false && !targets.has(e.to) && !sources.has(e.from+':'+e.output)){
+            const id='operand-'+e.to+'-'+e.input;operands.push({id,head:'n'+e.to,tail:'n'+e.from,input:e.input});
+            dot.push(source+' -> '+target+' [id="'+id+'"];');
+          } else dot.push(source+' -> '+target+';');
         }
         dot.push('}');
-        const viz=await Viz.instance(), result=viz.render(dot.join('\n'),{engine:data.engine,format:'svg'});
+        const viz=await Viz.instance(), result=viz.renderFormats(dot.join('\n'),['svg','json'],{engine:data.engine});
         if(result.status!=='success')throw Error(result.errors.map(e=>e.message).join('; '));
-        self.postMessage({svg:result.output,details,hidden:Array.from(hidden),engines:viz.engines});
+        const patches=data.engine==='dot' && operands.length?self.casadiEdgeNudge.operandNudges(JSON.parse(result.output.json),operands,binarySides,outputSide,horizontal):[];
+        self.postMessage({svg:result.output.svg,patches,details,hidden:Array.from(hidden),engines:viz.engines});
       }catch(error){self.postMessage({error:error.message||String(error)});}
     };
   }
-  const workerSource='('+layoutWorker.toString()+')();';
+  const workerSource='self.casadiEdgeNudge=('+edgeNudge.toString()+')();('+layoutWorker.toString()+')();';
   let worker=null, workerURL=null;
   function releaseWorker() {
     if(worker)worker.terminate();worker=null;
@@ -563,10 +570,14 @@ function mount(container, root, runtime) {
     rejectReady(new Error(message));
     releaseWorker();$('loading-text').textContent=message;$('cancel-layout').hidden=true;setStatus(message,'error');
   }
-  function installSVG(text, details, hidden) {
+  function installSVG(text, details, hidden, patches=[]) {
     const doc=new DOMParser().parseFromString(text,'image/svg+xml');
     if(doc.querySelector('parsererror') || doc.documentElement.localName!=='svg')throw Error('Viz.js returned invalid SVG');
-    svg=document.importNode(doc.documentElement,true);svg.setAttribute('role','img');svg.setAttribute('aria-label','Function instruction graph');
+    for(const {id,d,points} of patches){
+      const edge=doc.getElementById(id);if(!edge)continue;
+      edge.querySelector('path')?.setAttribute('d',d);edge.querySelector('polygon')?.setAttribute('points',points);
+    }
+    svg=document.importNode(doc.documentElement,true);svg.dataset.reroutedEdges=patches.length;svg.setAttribute('role','img');svg.setAttribute('aria-label','Function instruction graph');
     svg.removeAttribute('width');svg.removeAttribute('height');$('canvas').prepend(svg);initialView=svg.getAttribute('viewBox');
     for(const value of details){
       const element=svg.getElementById(value.id);element.classList.remove('node');element.classList.add(value.render==='io'?'io-node':'value-node');
@@ -652,7 +663,7 @@ function mount(container, root, runtime) {
         const option=document.createElement('option');option.value=engine;option.textContent=label+' ('+engine+')';return option;
       }));
       select.value=selected;
-      installSVG(data.svg,data.details,data.hidden);
+      installSVG(data.svg,data.details,data.hidden,data.patches);
     }catch(error){layoutError(error.message);}};
     worker.onerror=e=>layoutError('Could not load Viz.js. Check connectivity, or export with the viz_js option for offline use.');
     const {serialization,functions,...graph}=model;

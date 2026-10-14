@@ -31,7 +31,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.mjs",
-    "test:browser": "node test/browser.mjs && node test/expressions-browser.mjs && node test/settings-browser.mjs && node test/simple-ports-browser.mjs && node test/focused-details-browser.mjs && node test/output-ranges-browser.mjs && node test/casadi-files-browser.mjs",
+    "test:browser": "node test/browser.mjs && node test/expressions-browser.mjs && node test/settings-browser.mjs && node test/simple-ports-browser.mjs && node test/focused-details-browser.mjs && node test/output-ranges-browser.mjs && node test/casadi-files-browser.mjs && node test/commutative-browser.mjs",
     "dev": "node scripts/serve.mjs",
     "prepack": "npm run build"
   },
