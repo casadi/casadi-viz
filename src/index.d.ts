@@ -5,13 +5,17 @@ export interface GraphNode {
   id:number;op:number;kind:string;display:string;label:string;expression:string;formula:string;
   binary:boolean;ordered:boolean;inputs:Sparsity[];outputs:Sparsity[];
   input_names:string[];output_names:string[];constants:string[];
-  callee?:number;callee_type?:string;callee_serialized_ref?:number;model_path?:string;io_index?:number;io_offset?:number;symbol?:string;mapping?:number[];mapping_kind?:'extract'|'assign'|'add';
+  callee?:number;callee_type?:string;opaque?:boolean;callee_serialized_ref?:number;model_path?:string;io_index?:number;io_offset?:number;symbol?:string;mapping?:number[];mapping_kind?:'extract'|'assign'|'add';
 }
 export interface FunctionGraph {
   serialized_ref?:number;
   version:1;name:string;type:string;direction:'TB'|'BT'|'LR'|'RL';
   inputs:GraphPort[];outputs:GraphPort[];nodes:GraphNode[];
   edges:{from:number;output:number;to:number;input:number}[];
+  /** Functions owned by this one (oracle, nlp_hess_l, Map's f, ...), indexing the bundle registry. */
+  helpers?:{name:string;role?:string;function:number}[];
+  /** No expression graph: shown as a single call between inputs and outputs. */
+  opaque?:boolean;
 }
 export interface GraphBundle extends FunctionGraph {
   serialization?:StructuralDocument;

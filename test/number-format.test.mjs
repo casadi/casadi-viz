@@ -11,7 +11,9 @@ test('Numeric formats suppress binary decimal noise without changing input',()=>
  assert.equal(formatNumber(12345678,'g',3),'1.23e+7');
  assert.equal(formatNumber(0.000004321,'g',3),'4.32e-6');
  assert.equal(formatNumber(-0,'f',2),'-0.00');
- assert.equal(formatNumber(Infinity),'Infinity');
+ for(const v of [Infinity,'Infinity','inf'])assert.equal(formatNumber(v),'∞');
+ for(const v of [-Infinity,'-Infinity','-inf'])assert.equal(formatNumber(v),'−∞');
+ assert.equal(formatNumber('NaN'),'NaN');
  assert.equal(formatNumber('9223372036854775807'),'9223372036854775807');
  assert.equal(formatNumber('not a number'),'not a number');
 });

@@ -1,5 +1,7 @@
 /** Display precision only: never modifies graph/trace values. */
 export function formatNumber(value, format='g', digits=6) {
+  if([Infinity,'Infinity','+Infinity','inf','+inf'].includes(value))return '\u221e';
+  if([-Infinity,'-Infinity','-inf'].includes(value))return '\u2212\u221e';
   if(typeof value==='string'){
     if(!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(value))return value;
     // Preserve exact integer strings outside the JavaScript integer range.

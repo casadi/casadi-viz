@@ -30,3 +30,26 @@ footer{padding:8px 24px;border-top:1px solid var(--line);display:flex;justify-co
 #canvas .node text,#canvas .io-node text,#canvas .value-node text{font-family:"Times New Roman",Times,serif}
 
 #hierarchical-controls{border:0;padding:0;margin:0}#hierarchical-controls:disabled{opacity:.45}
+
+#canvas .function-badge{cursor:pointer;outline:none}
+#canvas .function-badge rect{fill:#fff;stroke:#b56324;stroke-width:1.2;filter:drop-shadow(0 1px 2px #0000002e)}
+#canvas .function-badge text{fill:#8a4719;font:600 11px system-ui,sans-serif}
+#canvas .function-badge .glyph{font:italic 600 13px "Times New Roman",Times,serif}
+#canvas .function-badge:hover rect,#canvas .function-badge:focus-visible rect,#canvas .function-badge[aria-expanded=true] rect{fill:#b56324}
+#canvas .function-badge:hover text,#canvas .function-badge:focus-visible text,#canvas .function-badge[aria-expanded=true] text{fill:#fff}
+#functions-popover{position:absolute;z-index:6;font-size:13px;width:min(400px,calc(100% - 24px));max-height:min(480px,70%);overflow:auto;background:white;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 32px #00000026;padding:6px 8px 8px;animation:pop .12s ease-out}
+#functions-title{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#888;margin:6px 6px 2px}#functions-title b{color:#b56324;text-transform:none;letter-spacing:0;font-size:12px}
+@keyframes pop{from{opacity:0;transform:translateY(-4px)}}
+#functions-search{width:100%;margin:6px 0 2px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font:inherit}
+.function-list h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#888;margin:12px 6px 4px;font-weight:400}
+.function-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;border-radius:6px;padding:7px 8px;background:none;white-space:normal}
+.function-row:hover,.function-row:focus-visible{background:#f3f7fa;outline:none}
+.function-row:focus-visible{box-shadow:inset 0 0 0 2px var(--blue)}
+.function-chip{flex:none;min-width:30px;text-align:center;font:600 10px/1 ui-monospace,monospace;padding:4px 5px;border-radius:4px;background:#eaf1f7;color:var(--blue);max-width:96px;overflow:hidden;text-overflow:ellipsis}
+.function-chip.opaque{background:#fbefe5;color:#b56324}
+.function-main{display:flex;flex-direction:column;min-width:0;flex:1;gap:2px}
+.function-name{font-weight:600;color:#222;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.function-signature{font:11px ui-monospace,monospace;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.function-count{flex:none;font-size:11px;color:#aaa;font-variant-numeric:tabular-nums}
+aside .function-list{margin:4px -8px 0}
+#breadcrumbs button.via{color:#b56324}

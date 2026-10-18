@@ -1,6 +1,10 @@
 # Unreleased
 
 - Operands of commutative operations (CasADi's CommChecker: `ordered` is false) no longer cross above the node: when dot places them the other way round, the two arrows trade in-ports after layout and are routed again the way dot routes them. No re-layout. Applies to the dot engine. Only pairs whose present route the transcription reproduces within 1 pt are touched; others (edges across several ranks, and in practice every flow but the default top-to-bottom) are left as dot drew them.
+- Dive into helper Functions (an nlpsol's oracle and `nlp_hess_l`, a Map's inner Function, ...): use the **ƒ** badge on the call node, which becomes a direct link when there is only one, or the clickable list in the side pane. Entries show the helper's Function name.
+- Find helpers generically, from the Function-typed fields of serialized records.
+- Show infinite constants as ∞ and −∞.
+- Bundle every called Function. Only MX/SX callees can be stepped into; double-clicking any other call opens its helpers, and a helper of a solver call opens directly, with the call in the breadcrumbs. A Function exported without an expression graph is shown as a single call with its helpers listed.
 
 # 3.8.4
 

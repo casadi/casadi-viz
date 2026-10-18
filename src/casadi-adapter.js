@@ -7,6 +7,23 @@ const unary=new Set(['neg','exp','log','sqrt','sq','twice','sin','cos','tan','as
 const binary=new Set(['add','sub','mul','div','pow','constpow','lt','le','eq','ne','and','or',
   'fmod','copysign','if_else_zero','fmin','fmax','atan2'].map(n=>OP[n]));
 const symbols={add:'+',sub:'-',mul:'*',div:'/',neg:'-',sq:'(.)^2',twice:'2*(.)',inv:'1/(.)'};
+// Functions without an expression graph (solvers, Map, ...) show as one call between their inputs and outputs.
+function opaqueGraph(f){
+  const io=(kind,i)=>{const sparsity=kind==='input'?f.ins[i]:f.outs[i],name=kind==='input'?f.inputNames[i]:f.outputNames[i];
+    return {op:OP[kind],kind,label:name,display:name,formula:name,expression:name,binary:false,ordered:false,
+      inputs:kind==='input'?[]:[sparsity],outputs:kind==='input'?[sparsity]:[],input_names:kind==='input'?[]:['arg0'],
+      output_names:kind==='input'?['out0']:[],constants:[],io_index:i,io_offset:0,...(kind==='input'?{symbol:name}:{})};};
+  const call={op:OP.call,kind:'call',label:'call',display:f.name,formula:f.name+'('+f.inputNames.join(', ')+')',
+    expression:f.name,binary:false,ordered:f.ins.length>1,inputs:f.ins,outputs:f.outs,input_names:f.inputNames,
+    output_names:f.outputNames,constants:[],callee_type:f.class_name+(f.plugin?' \u00b7 '+f.plugin:''),opaque:true,
+    ...(Number.isInteger(f.serialized_ref)?{callee_serialized_ref:f.serialized_ref}:{})};
+  const nodes=[...f.ins.map((_,i)=>io('input',i)),call,...f.outs.map((_,i)=>io('output',i))].map((n,id)=>({...n,id}));
+  const at=f.ins.length,edges=[...f.ins.map((_,i)=>({from:i,output:0,to:at,input:i})),
+    ...f.outs.map((_,i)=>({from:at,output:i,to:at+1+i,input:0}))];
+  return {version:1,name:f.name,type:f.class_name||f.type,direction:'TB',serialized_ref:f.serialized_ref,opaque:true,
+    inputs:f.ins.map((sparsity,i)=>({name:f.inputNames[i],sparsity})),
+    outputs:f.outs.map((sparsity,i)=>({name:f.outputNames[i],sparsity})),nodes,edges};
+}
 export function toGraphBundle(document){
   if(document.format==='casadi_serialization')document=toMXDocument(document);
   if(document.format!=='casadi_json'||document.version!==1)throw Error('Expected casadi_json version 1');
@@ -37,6 +54,11 @@ export function toGraphBundle(document){
       else throw Error('Unsupported SX instruction '+names.get(a.op));
       return {node:{op:a.op,info,sp:scalar,deps:arg.map(()=>({sp:scalar})),constants,callee},arg,res};
     });
+    const helpers=(f.helpers||[]).filter(h=>get(h.function)).map(h=>({name:h.name,role:h.role,function:build(get(h.function))}));
+    if(!['MXFunction','SXFunction','MX','SX'].includes(f.type)){
+      functions[index]={...opaqueGraph(f),helpers};
+      return index;
+    }
     const nodes=[],edges=[],producer=new Map();
     for(const [id,{node:n,arg,res}] of f.instructions.entries()){
       const label=names.get(n.op),input=n.op===OP.input,output=n.op===OP.output;
@@ -53,7 +75,7 @@ export function toGraphBundle(document){
         binary:binary.has(n.op),ordered:inputs.length>1&&![OP.add,OP.mul,OP.eq,OP.ne,OP.and,OP.or,OP.fmin,OP.fmax].includes(n.op),
         inputs,outputs,input_names,output_names,constants:(n.constants||[]).map(String),info:n.info};
       if(callee){
-        if(['MXFunction','SXFunction'].includes(callee.type))node.callee=build(callee);
+        node.callee=build(callee);
         node.callee_type=callee.class_name||callee.type;
         if(Number.isInteger(callee.serialized_ref))node.callee_serialized_ref=callee.serialized_ref;
         if(callee.model_path)node.model_path=callee.model_path;
@@ -74,7 +96,7 @@ export function toGraphBundle(document){
     }
     functions[index]={version:1,name:f.name,type:f.type,direction:'TB',serialized_ref:f.serialized_ref,
       inputs:f.ins.map((sparsity,i)=>({name:f.inputNames[i],sparsity})),
-      outputs:f.outs.map((sparsity,i)=>({name:f.outputNames[i],sparsity})),nodes,edges};
+      outputs:f.outs.map((sparsity,i)=>({name:f.outputNames[i],sparsity})),nodes,edges,helpers};
     return index;
   }
   build(get(document.root));

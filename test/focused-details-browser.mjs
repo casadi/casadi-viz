@@ -34,7 +34,7 @@ try{
  // Missing callee metadata must never silently select the parent Function.
  await page.evaluate(async()=>{
   window.focusBundle.serialized_ref=window.focusBundle.serialization.root;
-  delete window.focusBundle.nodes.find(n=>n.kind==='call').callee_serialized_ref;
+  const call=window.focusBundle.nodes.find(n=>n.kind==='call');delete call.callee_serialized_ref;delete call.callee;
   await window.focusViewer.setGraph(window.focusBundle);
  });
  assert(await page.locator('#focus #function-details').isEnabled());

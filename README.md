@@ -116,8 +116,11 @@ module URL, so both assets come from the same exact package release even if a
 new patch is published between requests. Explicit graph and trace schema
 versions remain independent of this package compatibility convention.
 
-C++ remains responsible for graph extraction, JSON serialization and standalone
-DOT generation. Interactive DOT assembly and rendering live in this repository.
+Native exports embed the serialized Function or expression (`source`, the
+`.casadi` text) and presentation options. This viewer decodes it with
+casadi-reader, so any serializable Function can be exported, including solvers
+and `map`. C++ produces standalone DOT only for SX/MX graphs. Interactive DOT
+assembly and rendering live in this repository.
 
 ## Bundle contract
 
@@ -243,6 +246,41 @@ Consult the reader README for supported serialization versions and constructs.
 
 Browser integration tests can also upload other readers’ output with
 `VIZ_PYTHON_JSON=/path/python.json VIZ_NATIVE_JSON=/path/native.json node test/casadi-files-browser.mjs`.
+
+## Helper functions
+
+A Function often owns other Functions: an `nlpsol` its oracle and `nlp_hess_l`,
+`nlp_jac_g`, ...; a `map` the Function it maps. When importing `.casadi` data,
+these helpers come from the Function-typed fields of the serialized record
+(`OracleFunction::oracle`, the `all_functions` map, `Map::f`, ...). Map keys name
+the entries. There is no list of known classes. Back-references
+(`derivative_of`) and call sites are excluded; call sites are already reachable
+from the graph.
+
+A call node whose callee has helpers carries a **ƒ** badge under its class
+line. Click it to list that callee's helpers by Function name, each with its
+type, signature and size. A callee with only one helper shows a direct link
+instead of a menu. The list can be filtered (from eight entries) and used with
+the arrow keys. Each badge belongs to its own call, so an Ipopt solver and a
+Newton rootfinder in the same graph keep their helpers apart. Selecting the call
+lists the same helpers in the side pane, and opening one goes through the call:
+the breadcrumbs then read `outer / solver / nlp_hess_l`.
+
+Only MX/SX callees can be stepped into. A Function without an expression graph
+(a solver, `Map`, an ONNX model, ...) is reached through its helpers instead:
+double-clicking its call opens the same menu as the badge.
+Opening one from a call goes straight to the helper, and the call stays in the
+breadcrumbs as a link back to the outer graph with that call selected. Every
+callee is still included in the bundle. A Function without a graph is
+represented as one call between its inputs and outputs, marked `opaque`. That
+view is shown only when the exported Function itself is such a Function (e.g.
+`solver.export_graph(...)`); it opens with the call selected, so its helpers
+are listed. Each graph's
+optional `helpers` array holds `{name, role, function}` entries, where
+`function` indexes the bundle registry in the same way as `callee`. Try
+`helpers_nlpsol`, `helpers_calls` and `helpers_mixed` in `examples/casadi-files.html`.
+Regenerate them with `python scripts/generate-helper-fixtures.py`, using a CasADi
+release whose serialization casadi-reader supports.
 
 ## Serialized Function details
 

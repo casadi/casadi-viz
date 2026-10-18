@@ -18,6 +18,29 @@ function scalar(value){
   return String(value);
 }
 function slice(value){return Object.fromEntries(value.fields.map(f=>[f.name.split('::').at(-1),f.value]));}
+// Function-typed fields own helper Functions (oracle, Map::f, ...); calls and back-references are excluded.
+const notHelpers=new Set(['FunctionInternal::derivative_of','SXFunction::call_el_f']);
+function helperFunctions(object,objects){
+  const found=new Map(),vectors=[];let key=null;
+  const add=(id,name,role)=>{
+    const target=objects[id];
+    if(found.has(id)||target?.type!=='Function'||field(target,'Function::null'))return;
+    found.set(id,{function:id,name:name??field(target,'ProtoFunction::name'),role});
+  };
+  const refs=value=>Array.isArray(value)?value.flatMap(refs):ref(value)===null?[]:[ref(value)];
+  for(const f of object.fields){
+    const path=f.name.split('::');
+    if(path.at(-1)==='key' && typeof f.value==='string'){key={prefix:path.slice(0,-1).join('::'),name:f.value};continue;}
+    if(notHelpers.has(f.name)||!/\bFunction\b/.test(f.type))continue;
+    const role=path.length>1?path[1]:f.name;
+    if(f.type!=='Function'){vectors.push([f,role]);continue;}
+    const keyed=key && f.name.startsWith(key.prefix+'::');
+    add(ref(f.value),keyed?key.name:path.slice(1).join('.')||f.name,role);
+  }
+  // Named fields first, so a registry vector does not rename them.
+  for(const [f,role] of vectors)for(const id of refs(f.value))add(id,undefined,role);
+  return [...found.values()];
+}
 /** Interpret serialized MX/SX layouts for visualization, independently of the reader. */
 export function toMXDocument(document){
   if(document.format!=='casadi_serialization'||document.version!==1)throw Error('Expected casadi_serialization version 1');
@@ -38,7 +61,8 @@ export function toMXDocument(document){
       const atomOp=all('SXFunction::ScalarAtomic::op'),atomI0=all('SXFunction::ScalarAtomic::i0'),atomI1=all('SXFunction::ScalarAtomic::i1'),atomI2=all('SXFunction::ScalarAtomic::i2');
       const nodes=all('MXFunction::alg::data'),args=all('MXFunction::alg::arg'),res=all('MXFunction::alg::res');
       return {kind:'function',name:field(object,'ProtoFunction::name'),type,serialized_ref,
-        model_path:field(object,'OnnxFunction::model_path'),
+        model_path:field(object,'OnnxFunction::model_path'),plugin:field(object,'PluginInterface::plugin_name'),
+        helpers:helperFunctions(object,document.objects),
         class_name:object.layouts?.find(layout=>layout.endsWith('::serialize_body'))?.split('::')[0]||type,
         atoms:type==='SXFunction'?atomOp.map((op,i)=>({op,i0:atomI0[i],i1:atomI1[i],i2:atomI2[i]})):undefined,
         sxCalls:all('SXFunction::call_el_f').map((f,i)=>({callee:ref(f),arg:all('SXFunction::call_el_dep')[i],res:all('SXFunction::call_el_res')[i]})),

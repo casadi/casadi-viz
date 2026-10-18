@@ -12,6 +12,9 @@ export function validateBundle(bundle) {
     if(graph.serialized_ref!==undefined && (!Number.isInteger(graph.serialized_ref)||
        !Array.isArray(bundle.serialization?.objects[graph.serialized_ref]?.fields)))
       throw Error('Invalid serialized Function reference');
+    if(graph.helpers!==undefined && (!Array.isArray(graph.helpers) || graph.helpers.some(h=>
+       typeof h?.name!=='string' || !Number.isInteger(h.function) || !graphs[h.function])))
+      throw Error('Invalid helper function reference');
     for(const key of ['nodes','edges','inputs','outputs']) {
       if(!Array.isArray(graph[key]))throw Error('Missing graph array: '+key);
     }

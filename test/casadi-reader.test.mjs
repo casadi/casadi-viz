@@ -38,3 +38,20 @@ test('Function settings retain reader fields without an option catalogue',async(
  assert.equal(callee.type,'SXFunction');
  assert.equal(graph.serialization.objects[callee.serialized_ref].fields.find(f=>f.name==='FunctionInternal::enable_forward').value,false);
 });
+
+test('helper functions come from Function-typed fields, without a class catalogue',async()=>{
+ const read=name=>readFile(new URL(`./fixtures/casadi/${name}.casadi`,import.meta.url),'utf8').then(decodeCasadi);
+ const solver=toGraphBundle(await read('helpers_nlpsol')),graphs=[solver,...solver.functions];
+ assert.equal(solver.opaque,true);
+ assert.deepEqual(solver.helpers.map(h=>h.name),['oracle','nlp_f','nlp_g','nlp_grad','nlp_grad_f','nlp_hess_l','nlp_jac_g']);
+ assert.equal(graphs[solver.helpers[0].function].name,'nlp');
+ assert.equal(graphs[solver.helpers.find(h=>h.name==='nlp_hess_l').function].type,'MXFunction');
+ // One call between the solver's inputs and outputs.
+ const call=solver.nodes.find(n=>n.opaque);
+ assert.equal(solver.edges.filter(e=>e.to===call.id).length,solver.inputs.length);
+ assert.equal(solver.edges.filter(e=>e.from===call.id).length,solver.outputs.length);
+ const model=toGraphBundle(await read('helpers_calls')),all=[model,...model.functions];
+ const callee=name=>all[model.nodes.find(n=>n.display===name).callee];
+ assert.deepEqual(callee('map4_f').helpers.map(h=>[h.name,all[h.function].type]),[['f','SXFunction']]);
+ assert.equal(callee('solver').helpers.length,7);
+});

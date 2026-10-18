@@ -24,7 +24,7 @@ export function createGraphViewer(host, options={}) {
         bundle={...decoded,...preferences};
         if(bundle.direction)for(const graph of [bundle,...bundle.functions])graph.direction=bundle.direction;
         if(bundle.include_functions===false){
-          bundle.functions=[];
+          bundle.functions=[];delete bundle.helpers;
           for(const node of bundle.nodes)delete node.callee;
         }
       }
@@ -164,6 +164,94 @@ function mount(container, root, runtime) {
     button.disabled=!Number.isInteger(target.ref);
     button.title=button.disabled?'No serialized properties available for '+target.name:'Inspect '+target.name;
   }
+  const functionEntries=graph=>(graph.helpers||[]).map(h=>({name:h.name,role:h.role,index:h.function}));
+  // Only callees with an expression graph are worth stepping into; the others are reached through their helpers.
+  const steppable=node=>node.callee!==undefined && !models[node.callee].opaque;
+  const typeChip=type=>({MXFunction:'MX',SXFunction:'SX'})[type]||type;
+  function functionRow(entry, open) {
+    const target=models[entry.index], row=document.createElement('button');
+    row.type='button';row.className='function-row';row.dataset.function=entry.index;
+    const chip=document.createElement('span');chip.className='function-chip'+(target.opaque?' opaque':'');chip.textContent=typeChip(target.type);
+    const main=document.createElement('span');main.className='function-main';
+    const name=document.createElement('span');name.className='function-name';name.textContent=target.name;
+    const signature=document.createElement('span');signature.className='function-signature';
+    signature.textContent='('+target.inputs.map(p=>p.name).join(', ')+') \u2192 ('+target.outputs.map(p=>p.name).join(', ')+')';
+    main.append(name,signature);
+    const count=document.createElement('span');count.className='function-count';
+    const helpers=functionEntries(target).length;
+    count.textContent=target.opaque?(helpers?helpers+' inside':''):target.nodes.length.toLocaleString()+' nodes';
+    row.title=(target.opaque?'Show the functions inside ':'Open the graph of ')+target.name+' ('+target.type+')';
+    row.append(chip,main,count);row.onclick=()=>open(entry);
+    return row;
+  }
+  function functionList(entries, open, title) {
+    const box=document.createElement('div');box.className='function-list';
+    if(title){const heading=document.createElement('h3');heading.textContent=title;box.append(heading);}
+    for(const entry of entries)box.append(functionRow(entry,open));
+    return box;
+  }
+  // A call node reaches its callee's helpers; an opaque graph's call node reaches the graph's own.
+  const nodeFunctions=node=>node.opaque?functionEntries(model):node.callee===undefined?[]:functionEntries(models[node.callee]);
+  // Helpers of a call open directly; the call stays in the breadcrumbs as a link back to it.
+  function openNodeFunction(node, entry) {
+    if(!node.opaque){selected=node.id;functionDetails=false;}
+    openFunction(entry,node.opaque?null:node.display);
+  }
+  const badgeText=entries=>entries.length===1?models[entries[0].index].name+' \u2192':entries.length+' functions \u25be';
+  let popover=null;
+  function badge(el, node) {
+    const entries=nodeFunctions(node);if(!entries.length)return;
+    const ns='http://www.w3.org/2000/svg',single=entries.length===1;
+    const anchor=[...el.querySelectorAll('text')].find(t=>t.textContent===node.callee_type),box=(anchor||el).getBBox();
+    const g=document.createElementNS(ns,'g'),rect=document.createElementNS(ns,'rect'),text=document.createElementNS(ns,'text');
+    const glyph=document.createElementNS(ns,'tspan'),title=document.createElementNS(ns,'title');
+    glyph.classList.add('glyph');glyph.textContent='ƒ ';
+    const only=single&&models[entries[0].index].name;
+    text.append(glyph,badgeText(entries));
+    title.textContent=single?'Open '+only+' inside '+node.display:'Functions inside '+node.display;
+    g.classList.add('function-badge');g.setAttribute('tabindex','0');g.setAttribute('role','button');
+    g.setAttribute('aria-label',title.textContent);g.dataset.call=node.display;g.append(title,rect,text);
+    (svg.querySelector('g.graph')||svg).append(g);
+    if(!single){g.setAttribute('aria-haspopup','dialog');g.setAttribute('aria-expanded','false');}
+    const width=text.getComputedTextLength()+16,height=19,x=box.x+box.width/2-width/2,y=box.y+box.height+4;
+    for(const [k,v] of Object.entries({x,y,width,height,rx:height/2}))rect.setAttribute(k,v);
+    text.setAttribute('x',x+8);text.setAttribute('y',y+13.5);
+    const activate=()=>single?openNodeFunction(node,entries[0]):popover?.badge===g?closePopover():openPopover(node,g);
+    g.onclick=e=>{e.stopPropagation();activate();};
+    g.ondblclick=g.onpointerdown=e=>e.stopPropagation();
+    g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();activate();}};
+    return activate;
+  }
+  function renderPopover() {
+    const node=popover.node,query=$('functions-search').value.trim().toLowerCase();
+    const entries=nodeFunctions(node).filter(e=>!query || (models[e.index].name+' '+models[e.index].type).toLowerCase().includes(query));
+    $('functions-list').replaceChildren(entries.length?functionList(entries,entry=>openNodeFunction(node,entry)):Object.assign(document.createElement('p'),{className:'hint',textContent:'No matching functions.'}));
+  }
+  function openPopover(node, badge) {
+    closePopover();popover={node,badge};
+    const name=document.createElement('b');name.textContent=node.display;
+    $('functions-title').replaceChildren('Inside ',name);
+    $('functions-search').value='';$('functions-search').hidden=nodeFunctions(node).length<8;renderPopover();
+    const panel=$('functions-popover'),canvas=$('canvas').getBoundingClientRect(),at=badge.getBoundingClientRect();
+    panel.hidden=false;badge.setAttribute('aria-expanded','true');
+    const below=at.bottom-canvas.top+6,above=at.top-canvas.top-panel.offsetHeight-6;
+    panel.style.left=Math.max(12,Math.min(at.left-canvas.left,canvas.width-panel.offsetWidth-12))+'px';
+    panel.style.top=(below+panel.offsetHeight>canvas.height-12 && above>=12?above:below)+'px';
+    ($('functions-search').hidden?$('functions-list').querySelector('button'):$('functions-search'))?.focus();
+  }
+  function closePopover() {
+    if(!popover)return;
+    $('functions-popover').hidden=true;popover.badge.setAttribute('aria-expanded','false');popover=null;
+  }
+  $('functions-search').oninput=renderPopover;
+  $('functions-popover').onkeydown=e=>{
+    if(e.key==='Escape'){const badge=popover?.badge;closePopover();badge?.focus();return;}
+    if(e.key!=='ArrowDown' && e.key!=='ArrowUp')return;
+    const rows=[...$('functions-list').querySelectorAll('button')];if(!rows.length)return;
+    e.preventDefault();const at=rows.indexOf(container.activeElement),down=e.key==='ArrowDown';
+    rows[at<0?(down?0:rows.length-1):(at+(down?1:rows.length-1))%rows.length].focus();
+  };
+  container.addEventListener('pointerdown',e=>{if(!e.composedPath().includes($('functions-popover')))closePopover();});
   function inspect() {
     if(functionDetails){
       const target=detailsTarget();
@@ -184,8 +272,17 @@ function mount(container, root, runtime) {
       state.textContent=shown ? trace.after[selected]===undefined ? 'Interrupted' : 'Evaluated' : 'Not evaluated';panel.append(state);
     }
     const expression=document.createElement('pre'); expression.textContent=node.kind==='constant'?node.constants.map(formatNumber).join(', '):node.formula;
-    if(node.callee!==undefined){
-      const enter=document.createElement('button');enter.id='enter-function';enter.textContent='Step into '+node.display;enter.onclick=()=>enterFunction(node.id);panel.append(enter);
+    if(node.opaque){
+      const entries=functionEntries(model);
+      const note=document.createElement('p');note.className='hint';
+      note.textContent=node.callee_type+' has no expression graph.'+(entries.length?' Open one of the functions it uses:':'');
+      panel.append(note);
+      if(entries.length)panel.append(functionList(entries,openFunction,'Functions inside'));
+    } else if(node.callee!==undefined){
+      if(steppable(node)){const enter=document.createElement('button');enter.id='enter-function';enter.textContent='Step into '+node.display;enter.onclick=()=>enterFunction(node.id);panel.append(enter);}
+      const entries=functionEntries(models[node.callee]);
+      if(!steppable(node)){const note=document.createElement('p');note.className='hint';note.textContent=node.callee_type+' has no expression graph.'+(entries.length?' Open one of the functions it uses:':'');panel.append(note);}
+      if(entries.length)panel.append(functionList(entries,entry=>openNodeFunction(node,entry),'Functions inside '+node.display));
     } else if(node.kind==='call'){
       const note=document.createElement('p');note.className='hint';note.textContent='No internal graph was included for this '+node.callee_type+'.';panel.append(note);
     }
@@ -359,14 +456,25 @@ function mount(container, root, runtime) {
   function header() {
     detailsButton();
     const nav=$('breadcrumbs');nav.replaceChildren();
+    const separator=()=>{const span=document.createElement('span');span.textContent='/';nav.append(span);};
     trail.forEach((frame,i)=>{
-      if(i){const separator=document.createElement('span');separator.textContent='/';nav.append(separator);}
+      if(i)separator();
+      if(frame.via){
+        const call=document.createElement('button');call.className='via';call.textContent=frame.via;call.title='Back to the '+frame.via+' call';
+        call.onclick=()=>navigate(i-1);nav.append(call);separator();
+      }
       const button=document.createElement('button');button.textContent=frame.model.name;button.disabled=i===trail.length-1;
       if(button.disabled){button.id='name';button.setAttribute('aria-current','page');}
       button.onclick=()=>navigate(i);nav.append(button);
     });
 
-    $('meta').textContent=`${model.type} \u00b7 ${model.nodes.length.toLocaleString()} ${['MX','SX'].includes(model.type)?'nodes':'instructions'} \u00b7 ${model.edges.length.toLocaleString()} connections`;
+    const helpers=functionEntries(model).length;
+    $('meta').textContent=model.opaque?`${model.type} \u00b7 no expression graph${helpers?` \u00b7 ${helpers} function${helpers===1?'':'s'} inside`:''}`
+      :`${model.type} \u00b7 ${model.nodes.length.toLocaleString()} ${['MX','SX'].includes(model.type)?'nodes':'instructions'} \u00b7 ${model.edges.length.toLocaleString()} connections`;
+  }
+  // A Function without a graph opens on its call node, which lists the functions inside.
+  function focusOpaque() {
+    if(model.opaque && selected===null && !functionDetails){selected=model.nodes.find(n=>n.opaque)?.id??null;$('details').hidden=selected===null;}
   }
   function saveFrame() {
     Object.assign(trail[trail.length-1],{trace,cursor,selected,traceName:$('trace-name').textContent});
@@ -375,12 +483,16 @@ function mount(container, root, runtime) {
     stop();++loadNumber;
     ({model,trace,cursor,selected}=trail[trail.length-1]);
     $('trace-name').textContent=trail[trail.length-1].traceName;
-    $('details').hidden=!functionDetails&&selected===null;header();controls();inspect();layout();
+    $('details').hidden=!functionDetails&&selected===null;focusOpaque();header();controls();inspect();layout();
     setStatus(trace?'Trace restored. Step through the evaluation.':'Select a node to inspect it. Double-click a function to step inside.');
   }
   function enterFunction(id) {
-    const callee=model.nodes[id].callee;if(callee===undefined)return;
-    saveFrame();trail.push({model:models[callee],trace:null,cursor:0,selected:null,traceName:''});activateFrame();
+    if(!steppable(model.nodes[id]))return;
+    saveFrame();trail.push({model:models[model.nodes[id].callee],trace:null,cursor:0,selected:null,traceName:''});activateFrame();
+  }
+  function openFunction(entry, via=null) {
+    closePopover();saveFrame();
+    trail.push({model:models[entry.index],trace:null,cursor:0,selected:null,traceName:'',via});activateFrame();
   }
   function navigate(index) {
     saveFrame();trail=trail.slice(0,index+1);activateFrame();
@@ -488,7 +600,8 @@ function mount(container, root, runtime) {
             const outputs=n.kind==='call' && n.output_names.length?ports(n.output_names,'out'):'';
             const title=n.kind==='call' && n.callee_type?
               '<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0"><TR><TD>'+h(n.display)+
-              '</TD></TR><TR><TD><FONT POINT-SIZE="10" COLOR="#f6dcc6">'+h(n.callee_type)+'</FONT></TD></TR></TABLE>':h(n.display);
+              '</TD></TR><TR><TD><FONT POINT-SIZE="10" COLOR="#f6dcc6">'+h(n.callee_type)+'</FONT></TD></TR>'+
+              (n.badge?'<TR><TD FIXEDSIZE="TRUE" WIDTH="'+Math.ceil(n.badge.length*6.6+20)+'" HEIGHT="26"></TD></TR>':'')+'</TABLE>':h(n.display);
             const sections=[inputs,'<TD>'+title+'</TD>',outputs].filter(Boolean);
             if(reverse)sections.reverse();
             let html='<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="6" BGCOLOR="'+color+'">'+
@@ -609,16 +722,21 @@ function mount(container, root, runtime) {
       const el=svg.getElementById('instruction-'+node.id);
       if(!el){if(hidden.includes(node.id)){paint(node.id);continue;}throw Error('Missing graph node '+node.id);}
       elements.set(node.id,el);el.onclick=()=>select(node.id);
-      if(node.callee!==undefined){
+      if(steppable(node)){
         el.onclick=()=>{clearTimeout(selectionTimer);selectionTimer=setTimeout(()=>select(node.id),400);};
         el.ondblclick=()=>{clearTimeout(selectionTimer);enterFunction(node.id);};
         el.querySelector('title').textContent='Double-click to step into '+node.display;
       }
       paint(node.id);
+      const helpers=node.kind==='call' && badge(el,node);
+      // Without a graph to step into, double-click opens the helpers instead.
+      if(helpers && !steppable(node)){
+        el.onclick=()=>{clearTimeout(selectionTimer);selectionTimer=setTimeout(()=>select(node.id),400);};
+        el.ondblclick=()=>{clearTimeout(selectionTimer);helpers();};el.querySelector('title').textContent='Double-click for the functions inside '+node.display;}
     }
     if(selected!==null)select(selected);
     svg.addEventListener('wheel',e=>{
-      e.preventDefault();const box=svg.viewBox.baseVal, factor=Math.exp(Math.max(-1,Math.min(1,e.deltaY*.001)));
+      e.preventDefault();closePopover();const box=svg.viewBox.baseVal, factor=Math.exp(Math.max(-1,Math.min(1,e.deltaY*.001)));
       const point=new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());
       svg.setAttribute('viewBox',[point.x+(box.x-point.x)*factor,point.y+(box.y-point.y)*factor,box.width*factor,box.height*factor].join(' '));
     },{passive:false});
@@ -651,7 +769,7 @@ function mount(container, root, runtime) {
   $('fit').onclick=()=>{if(svg)svg.setAttribute('viewBox',initialView);};
   $('cancel-layout').onclick=()=>layoutError('Layout cancelled. Reopen the file to try again.');
   function layout() {
-    clearTimeout(selectionTimer);releaseWorker();
+    clearTimeout(selectionTimer);releaseWorker();closePopover();
     if(svg)svg.remove();svg=null;elements.clear();valueElements.clear();
     $('loading').hidden=false;$('loading-text').textContent='Laying out the graph\u2026';$('cancel-layout').hidden=false;
     try {
@@ -669,7 +787,8 @@ function mount(container, root, runtime) {
     const {serialization,functions,...graph}=model;
     const layoutModel={...graph,nodes:graph.nodes.map(node=>node.kind==='constant'?{...node,
       constants:node.constants.map(formatNumber),
-      display:node.constants.length===1?formatNumber(node.constants[0]):node.display}:node)};
+      display:node.constants.length===1?formatNumber(node.constants[0]):node.display}:
+      node.kind==='call' && nodeFunctions(node).length?{...node,badge:'\u0192 '+badgeText(nodeFunctions(node))}:node)};
     worker.postMessage({url:runtime.url,model:layoutModel,viewMode:viewMode(),showContents,showSizes,engine:$('layout-engine').value,direction:$('layout-direction').value,nodeSpacing:0.65*spacingFactor('node-spacing'),levelSpacing:0.9*spacingFactor('level-spacing')});
     }catch(error){layoutError(error.message);}
   }
@@ -692,7 +811,7 @@ function mount(container, root, runtime) {
   $('size-toggle').checked=showSizes;
   $('detail-toggle').onchange=()=>{showContents=$('detail-toggle').checked;inspect();layout();};
   $('size-toggle').onchange=()=>{showSizes=$('size-toggle').checked;inspect();layout();};
-  header();layout();
+  focusOpaque();header();layout();
   return {
     ready,
     loadTrace,
