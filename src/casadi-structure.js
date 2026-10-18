@@ -93,8 +93,9 @@ export function toMXDocument(document){
       return node;
     }
     if(object.type!=='MX')return null;
-    const op=field(object,'MXNode::op'),info={},node={kind:'mx',op,operation:names.get(op),
-      deps:field(object,'MXNode::deps').map(ref),sp:ref(field(object,'MXNode::sp')),info};
+    // ZeroByZero constants ('z') write no body: no dependencies, 0-by-0 sparsity.
+    const op=field(object,'MXNode::op'),info={},sp=field(object,'MXNode::sp'),node={kind:'mx',op,operation:names.get(op),
+      deps:(field(object,'MXNode::deps')||[]).map(ref),sp:sp===undefined?null:ref(sp),info};
     const outputSparsities=field(object,'Split::output_sparsity');
     if(outputSparsities)node.outputSparsities=outputSparsities.map(ref);
     if(op===OP.call)node.callee=ref(field(object,'Call::fcn'));
@@ -128,7 +129,7 @@ export function toMXDocument(document){
   objects.push({kind:'sparsity',shape:[1,1],colind:[0,1],row:[0]});
   for(const node of objects)if(node?.kind==='mx'){
     if(objects[node.sp]===null)node.sp=null;
-    if(node.scalarConstant!==undefined){node.constants=Array(objects[node.sp].row.length).fill(node.scalarConstant);delete node.scalarConstant;}
+    if(node.scalarConstant!==undefined){node.constants=Array(node.sp===null?0:objects[node.sp].row.length).fill(node.scalarConstant);delete node.scalarConstant;}
   }
   let root=document.root;
   if(root===null || objects[root]?.kind!=='function'){

@@ -5,6 +5,7 @@
 - Dive into helper Functions (an nlpsol's oracle and `nlp_hess_l`, a Map's inner Function, ...): use the **ƒ** badge on the call node, which becomes a direct link when there is only one, or the clickable list in the side pane. Entries show the helper's Function name.
 - Find helpers generically, from the Function-typed fields of serialized records.
 - Show infinite constants as ∞ and −∞.
+- Render Functions containing an empty 0-by-0 MX constant (e.g. qpsol's qrqp).
 - Bundle every called Function. Only MX/SX callees can be stepped into; double-clicking any other call opens its helpers, and a helper of a solver call opens directly, with the call in the breadcrumbs. A Function exported without an expression graph is shown as a single call with its helpers listed.
 
 # 3.8.4
