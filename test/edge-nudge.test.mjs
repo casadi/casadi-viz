@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {instance} from '@viz-js/viz';
 import {edgeNudge} from '../src/edge-nudge.js';
 
@@ -39,6 +40,7 @@ function toDot(nodes, flow) {
   lines.push('}');
   return {dot: lines.join('\n'), operands, sides, out};
 }
+const pieces = c => Array.from({length: (c.length - 1) / 3}, (_, i) => bezier(c.slice(3 * i, 3 * i + 4), 40)).flat();
 const bezier = (c, n) => Array.from({length: n + 1}, (_, i) => {
   const t = i / n, u = 1 - t;
   return [0, 1].map(k => u * u * u * c[0][k] + 3 * u * u * t * c[1][k] + 3 * u * t * t * c[2][k] + t * t * t * c[3][k]);
@@ -73,16 +75,17 @@ test('re-routed operands never run through another node, in any flow', () => {
     const patches = operandNudges(layout, operands, sides, out, flow === 'LR' || flow === 'RL');
     patched += patches.length;
     for (const p of patches) {
-      const nums = p.d.match(/-?[\d.]+/g).map(Number), c = [0, 2, 4, 6].map(k => [nums[k], -nums[k + 1]]);
-      const e = layout.edges.find(x => x.id === p.id), ends = [layout.objects[e.tail].name, e.head];
+      const nums = p.d.match(/-?[\d.]+/g).map(Number);
+      const e = layout.edges.find(x => x.id === p.id), tail = layout.objects[e.tail].name;
+      const c = [];for (let k = 0; k < nums.length; k += 2) c.push([nums[k], -nums[k + 1]]);
       for (const o of layout.objects) {
-        if (!o.pos || ends.includes(o.name)) continue;
+        if (!o.pos || o.name === tail) continue;
         const [x, y] = o.pos.split(',').map(Number), rx = o.width * 36, ry = o.height * 36;
-        assert(!bezier(c, 40).some(q => ((q[0] - x) / rx) ** 2 + ((q[1] - y) / ry) ** 2 < .85), `${flow}: ${p.id} runs through ${o.name}`);
+        assert(!pieces(c).some(q => ((q[0] - x) / rx) ** 2 + ((q[1] - y) / ry) ** 2 < .85), `${flow}: ${p.id} runs through ${o.name}`);
       }
     }
   }
-  assert(patched >= 40, `only ${patched} edges re-routed`);  // all in the top-to-bottom flow (68 with this seed)
+  assert(patched >= 80, `only ${patched} edges re-routed`);  // all in the top-to-bottom flow (102 with this seed; 68 without last pieces)
 });
 
 test('r*c+2*r: the arrows into the final + no longer cross', () => {
@@ -99,4 +102,19 @@ test('r*c+2*r: the arrows into the final + no longer cross', () => {
   assert.equal(patches.length, 2);
   const tipX = id => { const p = patches.find(q => q.id === id).points.split(' ').map(q => +q.split(',')[0]); return p[1]; };
   assert(tipX('operand-z-0') > tipX('operand-z-1'), 'r*c (right) should now arrive at the right in-port');
+});
+
+test('nlp_grad: an operand joining over two ranks trades in-ports through its last piece', () => {
+  // f = (x0-p)^2 + x1^2: x1^2 (left) sits two ranks above the +, so dot draws its edge in two pieces
+  const dot = readFileSync(new URL('./fixtures/nlp-grad.dot', import.meta.url), 'utf8'), layout = JSON.parse(viz.renderString(dot, {format: 'json'}));
+  const operands = [...dot.matchAll(/(n\d+):s -> (n\d+):n[we] \[id="(operand-\d+-(\d))"\]/g)].map(([, tail, head, id, input]) => ({id, head, tail, input: +input}));
+  const patches = operandNudges(layout, operands, ['nw', 'ne'], 's', false), byId = id => patches.find(p => p.id === id);
+  assert(byId('operand-7-0') && byId('operand-7-1'), 'the + operands are not re-routed');
+  const drawn = layout.edges.find(e => e.id === 'operand-7-1').pos.split(' ').filter(t => !/^[se],/.test(t)).map(t => t.split(',').map(Number));
+  const route = byId('operand-7-1').d.match(/-?[\d.]+/g).map(Number), points = [];
+  for (let k = 0; k < route.length; k += 2) points.push([route[k], -route[k + 1]]);
+  assert.equal(points.length, 7);
+  assert.deepEqual(points.slice(0, 4), drawn.slice(0, 4), 'the first piece and the bend stay as dot drew them');
+  const tipX = id => +byId(id).points.split(' ')[1].split(',')[0];
+  assert(tipX('operand-7-1') < tipX('operand-7-0'), 'x1^2 (left) should now arrive at the left in-port');
 });

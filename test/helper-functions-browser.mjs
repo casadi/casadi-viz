@@ -66,5 +66,11 @@ try{
  assert.equal(await popover.locator('.function-row').count(),7);
  await popover.locator('.function-row',{hasText:'nlp_grad_f'}).click();
  await page.waitForFunction(()=>document.querySelector('#graph').shadowRoot.querySelector('#breadcrumbs').textContent==='solver/nlp_grad_f');
+ // nlp_grad: the operands of f = (x0-p)^2 + x1^2 trade in-ports, one through the last piece of a two-rank edge.
+ await page.locator('#breadcrumbs button',{hasText:'solver'}).click();
+ await badge('solver').click();await popover.locator('.function-row').filter({has:page.locator('.function-name',{hasText:/^nlp_grad$/})}).click();
+ await page.waitForFunction(()=>document.querySelector('#graph').shadowRoot.querySelector('#breadcrumbs').textContent==='solver/nlp_grad');
+ await page.locator('#graph svg[data-rerouted-edges]').waitFor();
+ assert.equal(await page.locator('#graph svg').getAttribute('data-rerouted-edges'),'2');
  assert.deepEqual(errors,[]);console.log('PASS: per-call helper badges, Ipopt/Newton separation, anchored popover, details-pane helpers, no stepping into solvers');
 }finally{await browser.close();}

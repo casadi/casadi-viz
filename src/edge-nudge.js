@@ -7,10 +7,14 @@
 // edges trade in-ports after layout: each is routed again, the way dot routes it, into the
 // other port. No re-layout; nothing else moves.
 //
-// Only pairs whose edges both join adjacent ranks, leave their tail through a port, are a
-// single Bézier piece and are reproduced by the transcription (within 1 pt) are touched. Edges across several ranks can have nodes in their way,
-// and avoiding those needs dot's routing corridor, which is not reproduced here. On random
-// expression graphs (test/edge-nudge.test.mjs) this never sent an edge through a node.
+// Only the part of an edge between the head's rank and the adjacent one is re-routed: the whole
+// edge when it joins adjacent ranks in a single Bézier piece, else its last piece when that starts
+// in the gap next to the head (dot splits edges across several ranks at bends on their way).
+// That part must leave its tail through a port, or along the curve at the bend, and be reproduced
+// by the transcription within 1 pt. Edges are not re-routed past other ranks: avoiding the nodes
+// there needs dot's routing corridor, which is not reproduced here. A new route that would enter a
+// node is dropped. On random expression graphs (test/edge-nudge.test.mjs) this never sent an edge
+// through a node.
 //
 // Self-contained (the layout worker receives it as source): edgeNudge() returns the functions.
 export function edgeNudge() {
@@ -66,6 +70,14 @@ export function edgeNudge() {
     const axis = horizontal ? 0 : 1, levels = [...new Set([...objects.values()].map(p => Math.round(p[axis])))].sort((u, v) => u - v);
     const rank = name => levels.indexOf(Math.round(objects.get(name)[axis]));
     const edges = new Map((layout.edges || []).map(e => [e.id, e]));
+    const shapes = layout.objects.filter(o => o.pos && o.width).map(o => {
+      const [x, y] = o.pos.split(',').map(Number);
+      return {name: o.name, x, y, rx: o.width * 36, ry: o.height * 36};
+    });
+    const at = (c, t) => { const u = 1 - t; return [0, 1].map(k => u * u * u * c[0][k] + 3 * u * u * t * c[1][k] + 3 * u * t * t * c[2][k] + t * t * t * c[3][k]); };
+    // inside the head's ellipse (shrunk 15%: the curve ends on its outline) or another node's box
+    const blocked = (c, head, tail) => shapes.some(s => s.name !== tail && Array.from({length: 41}, (_, k) => at(c, k / 40)).some(([x, y]) =>
+      s.name === head ? ((x - s.x) / s.rx) ** 2 + ((y - s.y) / s.ry) ** 2 < .85 : Math.abs(x - s.x) < s.rx - 1 && Math.abs(y - s.y) < s.ry - 1));
     const ev0 = [Math.cos(angle(outputSide)), Math.sin(angle(outputSide))];
     const pairs = new Map();
     for (const o of operands) pairs.set(o.head, [...(pairs.get(o.head) || []), o]);
@@ -75,26 +87,35 @@ export function edgeNudge() {
       pair.sort((u, v) => u.input - v.input);
       const geo = pair.map(o => {
         const e = edges.get(o.id);
-        if (!e?.pos || !objects.has(o.tail) || Math.abs(rank(head) - rank(o.tail)) !== 1) return null;
+        if (!e?.pos || !objects.has(o.tail)) return null;
         const parts = e.pos.split(' '), tip = parts.find(t => t.startsWith('e,'));
         const pts = parts.filter(t => !/^[se],/.test(t)).map(t => t.split(',').map(Number));
         const arrow = (e._hdraw_ || []).find(op => op.op === 'P' || op.op === 'p');
-        if (!tip || pts.length !== 4 || parts.some(t => t.startsWith('s,')) || !arrow) return null;
-        return {o, pts, tip: tip.slice(2).split(',').map(Number), arrow: arrow.points};
+        if (!tip || parts.some(t => t.startsWith('s,')) || !arrow) return null;
+        const me = {o, tip: tip.slice(2).split(',').map(Number), arrow: arrow.points}, span = Math.abs(rank(head) - rank(o.tail));
+        if (span === 1 && pts.length === 4) return {...me, pts, before: [], ev0};
+        if (span < 2 || pts.length < 7 || (pts.length - 1) % 3) return null;
+        // the last piece, if it lies between the head's rank and the adjacent one
+        const start = pts[pts.length - 4], ahead = levels[rank(head) + Math.sign(objects.get(o.tail)[axis] - objects.get(head)[axis])];
+        if ((start[axis] - ahead) * (start[axis] - objects.get(head)[axis]) >= 0) return null;
+        const d = [pts[pts.length - 3][0] - start[0], pts[pts.length - 3][1] - start[1]], l = Math.hypot(...d);
+        return {...me, pts: pts.slice(-4), before: pts.slice(0, -4), ev0: [d[0] / l, d[1] / l]};
       });
       if (geo.some(g => !g)) continue;
       // Re-route only edges whose present route dotEdge reproduces: then they are the simple
       // case transcribed here (no bend in dot's routing path), and so is the new route.
       geo.forEach((me, i) => {
         me.elen = Math.hypot(me.tip[0] - me.pts[3][0], me.tip[1] - me.pts[3][1]);
-        Object.assign(me, dotA(me.pts, me.tip, ev0, angle(sides[i]), me.elen));
+        Object.assign(me, dotA(me.pts, me.tip, me.ev0, angle(sides[i]), me.elen));
       });
       if (geo.some(g => g.err > 1)) continue;
-      // crossed: the tails lie in the opposite order to the in-ports they arrive at
-      const t0 = objects.get(geo[0].o.tail), t1 = objects.get(geo[1].o.tail);
+      // crossed: the re-routed parts start in the opposite order to the in-ports they arrive at
+      const t0 = geo[0].pts[0], t1 = geo[1].pts[0];
       if ((t0[0] - t1[0]) * (geo[0].tip[0] - geo[1].tip[0]) + (t0[1] - t1[1]) * (geo[0].tip[1] - geo[1].tip[1]) >= 0) continue;
+      const curves = geo.map((me, i) => dotEdge(me.pts[0], me.ev0, geo[1 - i].tip, angle(sides[1 - i]), me.elen, me.a));
+      if (curves.some((c, i) => blocked(c, head, geo[i].o.tail))) continue;
       geo.forEach((me, i) => {
-        const other = geo[1 - i], curve = dotEdge(me.pts[0], ev0, other.tip, angle(sides[1 - i]), me.elen, me.a);
+        const other = geo[1 - i], curve = curves[i];
         // the arrowhead: dot's own polygon, moved from the old base→tip onto the new one
         const frame = (base, tip) => { const l = Math.hypot(tip[0] - base[0], tip[1] - base[1]); return [base, [(tip[0] - base[0]) / l, (tip[1] - base[1]) / l]]; };
         const [b0, u0] = frame(me.pts[3], me.tip), [b1, u1] = frame(curve[3], other.tip);
@@ -103,7 +124,8 @@ export function edgeNudge() {
           return [b1[0] + s * u1[0] - t * u1[1], b1[1] + s * u1[1] + t * u1[0]];
         });
         const svg = p => +p[0].toFixed(2) + ',' + +(-p[1]).toFixed(2);  // SVG: y down
-        patches.push({id: me.o.id, d: 'M' + svg(curve[0]) + 'C' + curve.slice(1).map(svg).join(' '), points: points.map(svg).join(' ')});
+        const route = [...me.before, ...curve];
+        patches.push({id: me.o.id, d: 'M' + svg(route[0]) + 'C' + route.slice(1).map(svg).join(' '), points: points.map(svg).join(' ')});
       });
     }
     return patches;
