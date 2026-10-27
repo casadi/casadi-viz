@@ -1,3 +1,7 @@
+# 3.8.6
+
+- Use casadi-reader 0.3.1: read `.casadi` data written by CasADi 3.8.2, including the new `erk` and `rosenbrock` integrators.
+
 # 3.8.5
 
 - Use casadi-reader 0.3.0: read `.casadi` data written by earlier CasADi releases, and by CasADi main (FunctionInternal version 9), so `Function.export_graph` bundles from CasADi main open.
