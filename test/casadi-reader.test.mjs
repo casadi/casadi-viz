@@ -55,3 +55,10 @@ test('helper functions come from Function-typed fields, without a class catalogu
  assert.deepEqual(callee('map4_f').helpers.map(h=>[h.name,all[h.function].type]),[['f','SXFunction']]);
  assert.equal(callee('solver').helpers.length,7);
 });
+
+test('an empty 0-by-0 MX constant gets a 0-by-0 sparsity',async()=>{
+ const model=toGraphBundle(decodeCasadi(await readFile(new URL('./fixtures/casadi/empty_constant.casadi',import.meta.url),'utf8')));
+ const empty=model.nodes.find(n=>n.kind==='constant' && n.outputs[0].shape.join()==='0,0');
+ assert.deepEqual(empty.outputs,[{kind:'sparsity',shape:[0,0],colind:[0],row:[]}]);
+ assert.deepEqual(empty.constants,[]);
+});

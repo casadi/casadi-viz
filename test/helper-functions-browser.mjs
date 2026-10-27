@@ -72,5 +72,7 @@ try{
  await page.waitForFunction(()=>document.querySelector('#graph').shadowRoot.querySelector('#breadcrumbs').textContent==='solver/nlp_grad');
  await page.locator('#graph svg[data-rerouted-edges]').waitFor();
  assert.equal(await page.locator('#graph svg').getAttribute('data-rerouted-edges'),'2');
+ // An empty 0-by-0 constant renders with matrix contents shown.
+ await page.selectOption('#case','empty_constant');await call('qp').waitFor();
  assert.deepEqual(errors,[]);console.log('PASS: per-call helper badges, Ipopt/Newton separation, anchored popover, details-pane helpers, no stepping into solvers');
 }finally{await browser.close();}

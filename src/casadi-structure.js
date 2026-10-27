@@ -49,7 +49,7 @@ export function toMXDocument(document){
   const objects=document.objects.map((object,serialized_ref)=>{
     if(object.type==='Sparsity'){
       const v=field(object,'SparsityInternal::compressed');
-      return v.length?{kind:'sparsity',shape:v.slice(0,2),colind:v.slice(2,3+v[1]),row:v.slice(3+v[1])}:null;
+      return v.length?{kind:'sparsity',shape:v.slice(0,2),colind:v.slice(2,3+v[1]),row:v.slice(3+v[1])}:{kind:'sparsity',shape:[0,0],colind:[0],row:[]};
     }
     if(object.type==='Function'){
       if(field(object,'Function::null'))return null;
@@ -95,7 +95,7 @@ export function toMXDocument(document){
     if(object.type!=='MX')return null;
     // ZeroByZero constants ('z') write no body: no dependencies, 0-by-0 sparsity.
     const op=field(object,'MXNode::op'),info={},sp=field(object,'MXNode::sp'),node={kind:'mx',op,operation:names.get(op),
-      deps:(field(object,'MXNode::deps')||[]).map(ref),sp:sp===undefined?null:ref(sp),info};
+      deps:(field(object,'MXNode::deps')||[]).map(ref),sp:sp===undefined?document.objects.length+1:ref(sp),info};
     const outputSparsities=field(object,'Split::output_sparsity');
     if(outputSparsities)node.outputSparsities=outputSparsities.map(ref);
     if(op===OP.call)node.callee=ref(field(object,'Call::fcn'));
@@ -126,10 +126,9 @@ export function toMXDocument(document){
     }
     return node;
   });
-  objects.push({kind:'sparsity',shape:[1,1],colind:[0,1],row:[0]});
-  for(const node of objects)if(node?.kind==='mx'){
-    if(objects[node.sp]===null)node.sp=null;
-    if(node.scalarConstant!==undefined){node.constants=Array(node.sp===null?0:objects[node.sp].row.length).fill(node.scalarConstant);delete node.scalarConstant;}
+  objects.push({kind:'sparsity',shape:[1,1],colind:[0,1],row:[0]},{kind:'sparsity',shape:[0,0],colind:[0],row:[]});
+  for(const node of objects)if(node?.kind==='mx' && node.scalarConstant!==undefined){
+    node.constants=Array(objects[node.sp].row.length).fill(node.scalarConstant);delete node.scalarConstant;
   }
   let root=document.root;
   if(root===null || objects[root]?.kind!=='function'){

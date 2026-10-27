@@ -15,3 +15,5 @@ z = ca.MX.sym('z', 2)
 newton = ca.rootfinder('newton_solver', 'newton', {'x': z, 'p': p, 'g': ca.vertcat(z[0]**3+z[1]-p, z[1]-z[0])})
 ca.Function('mixed', [x, p], [solver(x0=x, p=p)['x'], newton(x, p)],
             ['x', 'p'], ['xopt', 'zroot']).save(str(out/'helpers_mixed.casadi'))
+qp = ca.qpsol('qp', 'qrqp', {'x': x, 'f': ca.dot(x, x)})
+ca.Function('empty_constant', [x], [qp(x0=x)['x']], ['x'], ['xopt']).save(str(out/'empty_constant.casadi'))
