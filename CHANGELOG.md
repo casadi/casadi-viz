@@ -1,3 +1,7 @@
+# 3.8.7
+
+- Fix "Layout failed: Cannot read properties of null (reading 'shape')" in the default view (matrix contents shown) of graphs with an empty 0-by-0 MX, e.g. any graph calling `qpsol`.
+
 # 3.8.6
 
 - Use casadi-reader 0.3.1: read `.casadi` data written by CasADi 3.8.2, including the new `erk` and `rosenbrock` integrators.
